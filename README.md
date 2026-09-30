@@ -7,7 +7,9 @@ Playwright 로 **dev 서버(https://devdmu.gosky.kr)의 실제 화면**을 브�
 
 ```bash
 cd ~/SilverBridgeQA
-npm test              # 전체 (약 4분, 한 개씩 순서대로)
+npm test              # 전체 (흐름 + 변수)
+npm run test:flow     # 흐름 테스트만 (정상 시나리오, 약 4분)
+npm run test:variables # 변수 QA 만 (예외·예외의 예외·미정의 변수, 테스트마다 임시 계정 사용)
 npm run test:smoke    # 스모크만 (메뉴·접근 제어, 약 30초)
 npm run test:headed   # 브라우저 창을 띄워서 보면서 실행 (WSLg)
 npm run test:ui       # Playwright UI 모드 (테스트 골라 실행·디버깅)

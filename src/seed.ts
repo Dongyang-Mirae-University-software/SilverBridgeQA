@@ -72,21 +72,73 @@ export function uniqueTestPhone(from = 9300, span = 600) {
   throw new Error('비어 있는 테스트 전화번호를 찾지 못했습니다.');
 }
 
+export interface TempUserOptions {
+  name?: string;
+  /** 기본 ACTIVE. RESTRICTED(이용 제한)·INACTIVE(탈퇴 진행 중) 상태를 바로 만들 수 있다 */
+  status?: 'ACTIVE' | 'RESTRICTED' | 'INACTIVE';
+  /** KAKAO 면 비밀번호 없이 만든다 (비밀번호 로그인 불가 - DB·API 레벨 시나리오용) */
+  provider?: 'LOCAL' | 'KAKAO';
+  /** 기본은 비어 있는 010-0001-xxxx 번호. null 이면 전화번호 없음 */
+  phone?: string | null;
+  gender?: 'MALE' | 'FEMALE';
+  birthDate?: string;
+  password?: string;
+}
+
+export interface TempUser {
+  id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  role: 'GUARDIAN' | 'WARD' | 'ADMIN';
+  status: 'ACTIVE' | 'RESTRICTED' | 'INACTIVE';
+  provider: 'LOCAL' | 'KAKAO';
+  password: string;
+}
+
+const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+function randomChars(n: number) {
+  return Array.from({ length: n }, () => ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)]).join('');
+}
+
+/** 비어 있는 010-0001-xxxx 번호 (가입자에게 배정되지 않는 국번. 변수 QA 임시 사용자용) */
+export function tempPhone() {
+  for (let i = 0; i < 20; i++) {
+    const phone = `0100001${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+    if (psql(`SELECT count(*) FROM users WHERE phone = ${sqlStr(phone)};`) === '0') return phone;
+  }
+  throw new Error('비어 있는 임시 전화번호를 찾지 못했습니다.');
+}
+
 /**
- * "처음 쓰는 사용자" 가 필요한 테스트용 일회성 계정 (매번 새 id).
- * 이메일이 e2e 패턴이라 다음 실행의 resetE2eAccounts 가 지운다. 바로 지우려면 deleteTempUser.
+ * 테스트용 일회성 계정 (매번 새 id). 테스트끼리 상태를 공유하지 않게 할 때 쓴다.
+ * 이메일이 e2e 패턴이라 다음 실행의 resetE2eAccounts 가 지운다. 바로 지우려면 deleteTempUser
+ * (fixtures 의 tempUser 를 쓰면 테스트가 끝날 때 자동으로 지운다).
  */
-export function createTempUser(role: 'GUARDIAN' | 'WARD', name: string) {
-  const suffix = Math.random().toString(36).slice(2, 5);
-  const id = `e2eq${suffix}`.slice(0, 6);
-  const email = `e2e.temp.${Date.now().toString(36)}${suffix}@silverbridge.test`;
-  const phone = uniqueTestPhone(9900, 99);
-  const hash = bcrypt.hashSync(env.password, 10);
-  psql(`INSERT INTO users (id, email, password, name, phone, role, status, provider, gender, birth_date,
-                           postcode, address, address_detail)
-        VALUES (${[id, email, hash, name, phone, role].map(sqlStr).join(', ')}, 'ACTIVE', 'LOCAL', 'MALE', '1970-01-01',
-                ${sqlStr(ADDRESS.postcode)}, ${sqlStr(ADDRESS.address)}, ${sqlStr(ADDRESS.addressDetail)});`);
-  return { id, email, name, phone };
+export function createTempUser(role: 'GUARDIAN' | 'WARD' | 'ADMIN', nameOrOptions?: string | TempUserOptions): TempUser {
+  const o: TempUserOptions = typeof nameOrOptions === 'string' ? { name: nameOrOptions } : nameOrOptions ?? {};
+  const provider = o.provider ?? 'LOCAL';
+  const status = o.status ?? 'ACTIVE';
+  const password = o.password ?? env.password;
+  const phone = o.phone === undefined ? tempPhone() : o.phone;
+  const hash = provider === 'LOCAL' ? bcrypt.hashSync(password, 10) : null;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const id = `e2${randomChars(4)}`;
+    if (psql(`SELECT count(*) FROM users WHERE id = ${sqlStr(id)};`) !== '0') continue;
+    const suffix = randomChars(4);
+    const email = `e2e.temp.${Date.now().toString(36)}${suffix}@silverbridge.test`;
+    const name = o.name ?? `E2E임시${role === 'WARD' ? '피보호자' : role === 'GUARDIAN' ? '보호자' : '관리자'}${suffix.slice(0, 2)}`;
+    psql(`INSERT INTO users (id, email, password, name, phone, role, status, provider, provider_id, gender, birth_date,
+                             postcode, address, address_detail)
+          VALUES (${[id, email, hash, name, phone, role, status, provider,
+                     provider === 'KAKAO' ? `e2e-kakao-${id}` : null,
+                     o.gender ?? 'MALE', o.birthDate ?? '1970-01-01'].map(sqlStr).join(', ')},
+                  ${sqlStr(ADDRESS.postcode)}, ${sqlStr(ADDRESS.address)}, ${sqlStr(ADDRESS.addressDetail)});`);
+    return { id, email, name, phone, role, status, provider, password };
+  }
+  throw new Error('임시 사용자 id 를 만들지 못했습니다.');
 }
 
 export function deleteTempUser(id: string) {

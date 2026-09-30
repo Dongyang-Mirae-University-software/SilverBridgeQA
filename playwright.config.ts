@@ -34,7 +34,10 @@ export default defineConfig({
     },
   },
   projects: [
+    // 흐름 QA: 고정 E2E 계정을 매번 재생성하고 시나리오를 순서대로 돈다
     { name: 'setup', testMatch: /global\.setup\.ts/ },
-    { name: 'e2e', testIgnore: /global\.setup\.ts/, dependencies: ['setup'] },
+    { name: 'e2e', testIgnore: [/global\.setup\.ts/, /variables[\\/]/], dependencies: ['setup'] },
+    // 변수 QA: 테스트마다 임시 사용자를 만들고 지우므로 고정 계정·전체 재생성이 필요 없다
+    { name: 'variables', testMatch: /variables[\\/].*\.spec\.ts/ },
   ],
 });

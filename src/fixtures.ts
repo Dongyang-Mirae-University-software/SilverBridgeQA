@@ -12,6 +12,7 @@ import { BrowserContext, expect, Page, test as base } from '@playwright/test';
 import { AccountKey } from './accounts';
 import { Api, LoginResult } from './api';
 import { contextDefaults, installPageStubs, PageWatcher, pageStubArg } from './browser';
+import { createTempUser, deleteTempUser, TempUser, TempUserOptions } from './seed';
 import { freshLogin, statePath, tokenCookies } from './session';
 
 /** 고정 계정이 아닌 사용자(테스트 중 만든 일회성 계정 등)로 열 때 */
@@ -23,10 +24,26 @@ export interface AdHocUser {
 /** path 에 null 을 주면 페이지만 열고 이동하지 않는다 (page.route 를 먼저 걸어야 할 때) */
 type OpenAs = (who: AccountKey | 'anonymous' | AdHocUser, path?: string | null) => Promise<Page>;
 
+/** 로그인한 임시 사용자: API 호출용 클라이언트와, openAs 에 그대로 넘길 수 있는 브라우저 로그인 정보 */
+export interface LoggedIn {
+  user: TempUser;
+  api: Api;
+  login: LoginResult;
+  who: AdHocUser;
+}
+
 interface Fixtures {
   openAs: OpenAs;
   /** 계정별 API 클라이언트 (셋업·교차 검증용). 같은 테스트 안에서는 캐시된다 */
   apiAs: (key: AccountKey) => Promise<Api>;
+  /**
+   * 이 테스트 전용 임시 사용자를 만든다. 테스트가 끝나면 자동으로 지운다.
+   *   const ward = await tempUser('WARD');
+   *   const restricted = await tempUser('GUARDIAN', { status: 'RESTRICTED' });
+   */
+  tempUser: (role: TempUser['role'], options?: TempUserOptions) => Promise<TempUser>;
+  /** 임시 사용자로 로그인 (레이트리밋은 자동으로 풀고 재시도) */
+  loginAs: (user: TempUser) => Promise<LoggedIn>;
 }
 
 export const test = base.extend<Fixtures>({
@@ -88,6 +105,33 @@ export const test = base.extend<Fixtures>({
       return api;
     });
     for (const api of cache.values()) await api.dispose();
+  },
+
+  tempUser: async ({}, use) => {
+    const created: string[] = [];
+    await use(async (role, options) => {
+      const user = createTempUser(role, options);
+      created.push(user.id);
+      return user;
+    });
+    for (const id of created.reverse()) {
+      try {
+        deleteTempUser(id);
+      } catch (error) {
+        console.warn(`임시 사용자 ${id} 정리 실패 (다음 전체 실행 때 정리됨):`, error);
+      }
+    }
+  },
+
+  loginAs: async ({}, use) => {
+    const apis: Api[] = [];
+    await use(async user => {
+      const login = await Api.signinWithRetry(user.email, user.password);
+      const api = await Api.fromLogin(login);
+      apis.push(api);
+      return { user, api, login, who: { label: user.id, login } };
+    });
+    for (const api of apis) await api.dispose();
   },
 });
 
