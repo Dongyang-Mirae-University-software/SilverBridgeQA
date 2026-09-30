@@ -6,3 +6,5 @@ reports/
 test-results/
 playwright-report/
 blob-report/
+# QA 결과물은 저장소에 두지 않는다 (Notion DMU > SilverBridgeQA 에만 정리)
+docs/

@@ -31,8 +31,8 @@ sudo apt install -y fonts-noto-cjk   # 스크린샷의 한글이 □ 로 나오�
 
 - 실패한 테스트마다 **스크린샷 · 영상 · trace**(모든 클릭·네트워크·콘솔을 되감아 보는 파일)가 `reports/` 에 남는다.
   `npm run report` → 실패 항목 클릭 → Trace 탭.
-- 테스트 이름 옆 `issue` 주석이 붙은 실패는 **이미 원인을 확인한 제품 버그**다 - `docs/findings.md`,
-  팀 공유용은 Notion `DMU > SilverBridgeQA` (AI 서버·FE·BE 페이지): https://app.notion.com/p/3eb2f400f9a08187b1c2cb8b94229949
+- 테스트 이름 옆 `issue` 주석이 붙은 실패는 **이미 원인을 확인한 제품 버그**다.
+  발견한 문제·QA 결과는 저장소에 두지 않고 모두 Notion `DMU > SilverBridgeQA` 에 정리한다: https://app.notion.com/p/3eb2f400f9a08187b1c2cb8b94229949
 - 모든 화면에서 자동으로 감시하는 것: **처리되지 않은 JS 예외**, **/api 5xx 응답** → 화면이 멀쩡해 보여도 실패로 처리.
   `console.error` 는 실패시키지 않고 리포트에 첨부만 한다.
 
