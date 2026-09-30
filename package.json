@@ -1,0 +1,23 @@
+{
+  "name": "silverbridge-qa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SilverBridge 실제 웹 화면 E2E QA 자동화 (Playwright)",
+  "type": "module",
+  "scripts": {
+    "init:env": "node scripts/init-env.mjs",
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:headed": "playwright test --headed --workers=1",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report reports/html",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.0.0",
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^17.2.0",
+    "typescript": "^5.9.0"
+  }
+}
