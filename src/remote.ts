@@ -3,6 +3,8 @@
  * 테스트 계정 재생성, 레이트리밋 해제, 결과 확인처럼 화면만으로는 못 하는 준비·검증에만 쓴다.
  */
 import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 import { env } from './env';
 
@@ -49,6 +51,26 @@ function assertSafe(token: string) {
 export function redis(...args: string[]): string {
   args.forEach(assertSafe);
   return remoteBash(`docker exec ${env.redisContainer} redis-cli ${args.join(' ')}\n`).trim();
+}
+
+/** gosky 의 파일을 로컬 캐시로 받아 로컬 경로를 돌려준다 (이미 있으면 재사용) */
+export function fetchRemoteFile(remotePath: string, localName: string): string {
+  const dir = path.resolve('.cache');
+  const local = path.join(dir, localName);
+  if (!existsSync(local)) {
+    if (!/^[\w./\-]+$/.test(remotePath)) throw new Error(`허용되지 않는 경로: ${remotePath}`);
+    const b64 = remoteBash(`base64 -w0 '${remotePath}'\n`).trim();
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(local, Buffer.from(b64, 'base64'));
+  }
+  return local;
+}
+
+/** BE 컨테이너 로그에서 최근 N초 안에 문자열이 몇 번 나왔는지 (화면·API 로 관찰할 수 없는 내부 동작 확인용) */
+export function countBackendLog(needle: string, sinceSeconds = 180): number {
+  if (!/^[\w가-힣:=\-. \[\]]+$/.test(needle)) throw new Error(`허용되지 않는 검색어: ${needle}`);
+  const out = remoteBash(`docker logs --since ${sinceSeconds}s ${env.apiContainer} 2>&1 | grep -cF '${needle}' || true\n`);
+  return Number(out.trim()) || 0;
 }
 
 /** 패턴에 맞는 키를 모두 지우고 지운 개수를 돌려준다 */
