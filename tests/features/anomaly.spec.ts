@@ -9,7 +9,7 @@
  *   [BE]       보호자 이력 조회·판정, 관리자 이상감지 로그   ← FE 에 화면이 없어 API 로
  *
  * 실제 발송: 이상감지 알림은 FCM 고정 + SMS·알림톡은 사용자가 켠 경우만이다. E2E 계정은 기본값(앱 푸시만)이라
- * 문자·알림톡은 나가지 않는다 — 테스트가 그것까지 확인한다.
+ * 문자·알림톡은 나가지 않는다 - 테스트가 그것까지 확인한다.
  *
  * 사용 계정: ward1(카메라 주인) ↔ guardian1
  */
@@ -167,7 +167,7 @@ test.describe('이상감지(화재)', () => {
     // 순서: 1) 카메라 등록(sessionId 발급)  2) 화면에서 그 sessionId 로 송출 시작
     //       3) 같은 deviceId 로 재등록(멱등) → BE 가 AI 세션 목록을 다시 요청 → 이미 돌고 있는 세션을 구독
     const camera = await wardApi.post<Camera>('/api/ward/camera', { label: cameraLabel });
-    // 보호자가 앱을 켜 둔 상태 — 이 브라우저로 실시간 이벤트를 받는다
+    // 보호자가 앱을 켜 둔 상태 - 이 브라우저로 실시간 이벤트를 받는다
     const listener = await openAs('guardian1', '/guardian');
     const streamer = await openAs('guardian1', '/guardian/stream');
     try {

@@ -1,4 +1,4 @@
-# SilverBridge QA — 실제 화면 E2E 자동화
+# SilverBridge QA - 실제 화면 E2E 자동화
 
 Playwright 로 **dev 서버(https://devdmu.gosky.kr)의 실제 화면**을 브라우저로 조작해서, 기능이 의도대로 동작하는지 검사한다.
 단위·통합 테스트가 못 잡는 것(FE↔BE 계약, 실시간 알림, 역할별 화면 이동, 외부 서비스 연동, 접근성)을 잡는 게 목적이다.
@@ -31,7 +31,7 @@ sudo apt install -y fonts-noto-cjk   # 스크린샷의 한글이 □ 로 나오�
 
 - 실패한 테스트마다 **스크린샷 · 영상 · trace**(모든 클릭·네트워크·콘솔을 되감아 보는 파일)가 `reports/` 에 남는다.
   `npm run report` → 실패 항목 클릭 → Trace 탭.
-- 테스트 이름 옆 `issue` 주석이 붙은 실패는 **이미 원인을 확인한 제품 버그**다 — `docs/findings.md`,
+- 테스트 이름 옆 `issue` 주석이 붙은 실패는 **이미 원인을 확인한 제품 버그**다 - `docs/findings.md`,
   팀 공유용은 Notion `DMU > SilverBridgeQA` (AI 서버·FE·BE 페이지): https://app.notion.com/p/3eb2f400f9a08187b1c2cb8b94229949
 - 모든 화면에서 자동으로 감시하는 것: **처리되지 않은 JS 예외**, **/api 5xx 응답** → 화면이 멀쩡해 보여도 실패로 처리.
   `console.error` 는 실패시키지 않고 리포트에 첨부만 한다.
@@ -42,7 +42,7 @@ sudo apt install -y fonts-noto-cjk   # 스크린샷의 한글이 □ 로 나오�
 |---|---|
 | `tests/smoke` | 역할별 전 메뉴 진입, 비로그인·역할 불일치 접근 차단, 위조 토큰 |
 | `tests/auth` | 로그인/로그아웃(토큰 블랙리스트까지), 회원가입 전 과정, 아이디·비밀번호 찾기, 카카오 인증 리다이렉트 |
-| `tests/connection` | 보호자↔피보호자 연결 요청·수락·거절·취소·해제 — **두 브라우저를 동시에 띄워 실시간 알림까지** |
+| `tests/connection` | 보호자↔피보호자 연결 요청·수락·거절·취소·해제 - **두 브라우저를 동시에 띄워 실시간 알림까지** |
 | `tests/medication` | 약 등록·수정·삭제, 피보호자 복용 체크 → 보호자 화면 실시간 반영, 알림 설정 저장 |
 | `tests/sos` | SOS 3가지 동작 설정별 흐름, 보호자 실시간 알림, SOS 이력, **서버 알림 발송 기록(notification_log)** 확인 |
 | `tests/settings` | 알림 채널, 비밀번호 변경(이전 토큰 무효화), 회원 탈퇴, 피보호자 글자 크기·고대비·접근성 |
@@ -57,7 +57,7 @@ sudo apt install -y fonts-noto-cjk   # 스크린샷의 한글이 □ 로 나오�
 | 키 | ID | 용도 |
 |---|---|---|
 | admin | e2ea01 | 관리자 API 로 셋업·검증 (FE 에 관리자 화면 없음) |
-| guardian1 ↔ ward1 | e2eg01 ↔ e2ew01 | 기본 연결 쌍 — 복약·SOS |
+| guardian1 ↔ ward1 | e2eg01 ↔ e2ew01 | 기본 연결 쌍 - 복약·SOS |
 | guardian2, ward2, ward3 | e2eg02, e2ew02, e2ew03 | 연결 요청·수락·거절·해제 |
 | guardian3 | e2eg03 | 비밀번호 변경 (토큰이 전부 무효화되므로 전용) |
 | ward4 | e2ew04 | 회원 탈퇴 (영구 삭제되므로 전용) |
@@ -66,7 +66,7 @@ sudo apt install -y fonts-noto-cjk   # 스크린샷의 한글이 □ 로 나오�
 - 전화번호: `010-0000-9xxx` (가입자에게 배정되지 않는 국번)
 - 비밀번호: `.env` 의 `E2E_PASSWORD`
 
-## 안전장치 — dev 서버는 실제로 문자·알림톡을 보낸다
+## 안전장치 - dev 서버는 실제로 문자·알림톡을 보낸다
 
 - **SOS**: BE 는 FCM 을 보내고 실패하면 SMS 로 폴백한다. 헤드리스 브라우저엔 FCM 토큰이 없으므로
   **"SOS → 보호자 실시간 알림" 테스트 1개가 실행마다 Solapi 로 SMS 1건을 실제 발송 요청한다**
@@ -86,14 +86,14 @@ sudo apt install -y fonts-noto-cjk   # 스크린샷의 한글이 □ 로 나오�
 | E2E 계정과 그 데이터(연결·약·SOS·알림 기록) | dev DB | 다음 실행 때 자동 삭제 후 재생성 |
 | 로그인 레이트리밋 카운터 `rate:signin:*` 삭제 | dev Redis | 1분 10회 제한을 풀어 주는 방향이라 해 없음 (팀원 IP 카운터도 초기화됨) |
 | 병원 예약 1건 생성 → 바로 취소 | 예약 서비스 | 취소 상태로 남음 |
-| 예약 서비스 계정 `sb-e2eqXX@silverbridge.local` | 예약 서비스 DB | **자동 정리 안 됨** — "첫 방문" 회귀 테스트가 실행마다 1개씩 만든다 |
+| 예약 서비스 계정 `sb-e2eqXX@silverbridge.local` | 예약 서비스 DB | **자동 정리 안 됨** - "첫 방문" 회귀 테스트가 실행마다 1개씩 만든다 |
 | AI 챗봇 대화 1건 | AI 서버 | 정리 안 됨 |
 | 카메라 등록 → 테스트 끝에 삭제, 이상감지 상황·이력 | dev DB | 다음 실행 때 E2E 계정과 함께 삭제 |
 | 송출 세션 `ward_e2ew01_*` (약 30초간 이상감지 모니터 목록에 보임) | AI 서버 | 테스트 끝에 종료. 분석 결과 기록은 AI DB 에 남음 |
 
 ## 테스트 작성 규칙
 
-- 역할이 필요하면 `openAs('guardian1', '/guardian/medication')` — 계정별로 **별도 브라우저 컨텍스트**가 열린다.
+- 역할이 필요하면 `openAs('guardian1', '/guardian/medication')` - 계정별로 **별도 브라우저 컨텍스트**가 열린다.
   보호자·피보호자를 동시에 열면 실시간 상호작용을 그대로 재현할 수 있다. 실시간 검증 전엔 `waitForRealtime(page)`.
 - 셋업·교차검증용 API 는 `apiAs('admin')` (로그인 토큰을 재사용해서 열려 있는 브라우저를 로그아웃시키지 않음).
 - 화면 로그인·로그아웃·비밀번호 변경을 한 테스트는 `markStale(계정)` 을 호출 (저장된 토큰이 무효가 됐을 수 있음).
