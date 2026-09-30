@@ -57,6 +57,12 @@ export function installPageStubs() {
 export const pageStubArg = ADDRESS;
 
 /**
+ * 알려진 환경 장애로 5xx 가 나는 경로를 잠시 제외할 때 쓴다 (정규식). 예: AI 서버 연결 장애 중
+ * E2E_IGNORE_5XX='/api/streams/'. 제외한 요청은 리포트의 console.error 에는 그대로 남는다.
+ */
+const IGNORE_5XX = process.env.E2E_IGNORE_5XX ? new RegExp(process.env.E2E_IGNORE_5XX) : null;
+
+/**
  * 페이지에서 일어난 문제를 모은다.
  * - pageerror(잡히지 않은 JS 예외)와 /api 의 5xx 는 버그로 보고 테스트를 실패시킨다
  * - console.error 는 참고용으로 리포트에만 첨부한다
@@ -75,7 +81,7 @@ export class PageWatcher {
     });
     page.on('response', response => {
       const url = response.url();
-      if (response.status() >= 500 && url.includes('/api/')) {
+      if (response.status() >= 500 && url.includes('/api/') && !(IGNORE_5XX && IGNORE_5XX.test(url))) {
         this.serverErrors.push(`${response.status()} ${response.request().method()} ${url}`);
       }
     });

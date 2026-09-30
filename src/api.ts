@@ -54,7 +54,7 @@ export class Api {
    * 로그인하되, IP 레이트리밋(1분 10회) 초과로 막히면 카운터를 풀고 다시 시도한다.
    * 로그인 잠금(5회 실패)은 검증 대상이라 재시도하지 않고 그대로 던진다.
    */
-  static async signinWithRetry(email: string, password: string, attempts = 4): Promise<LoginResult> {
+  static async signinWithRetry(email: string, password: string, attempts = 8): Promise<LoginResult> {
     for (let i = 1; ; i++) {
       try {
         return await Api.signin(email, password);
