@@ -137,10 +137,8 @@ test.describe('회원 탈퇴', () => {
   test('[계약] 카카오 가입자 탈퇴 시 FE 가 BE 가 요구하는 확인 문구를 보낸다', async ({ openAs }) => {
     // 실제 카카오 계정으로는 로그인할 수 없으므로, 내 정보 응답의 provider 만 KAKAO 로 바꿔 화면을 카카오 모드로 만들고
     // 탈퇴 요청은 서버로 보내지 않고 가로채서 본문만 확인한다.
-    test.info().annotations.push({
-      type: 'issue',
-      description: 'FE 는 "회원탈퇴" 입력을 강제하고 그대로 보내지만 BE 는 confirmation="탈퇴" 만 허용 (UserService.KAKAO_WITHDRAW_CONFIRMATION) → 카카오 가입자는 탈퇴 불가',
-    });
+    // 2026-10-01 BE 가 "탈퇴"·"회원탈퇴" 둘 다 받도록 바뀌었다 (BE-2). FE 는 "회원탈퇴"를 보낸다.
+    const ACCEPTED = ['탈퇴', '회원탈퇴'];
     const page = await openAs('guardian2', null);
     let deleteBody: Record<string, unknown> | null = null;
     await page.route('**/api/user/me', async route => {
@@ -166,6 +164,7 @@ test.describe('회원 탈퇴', () => {
     await input.getByRole('button', { name: '탈퇴하기' }).click();
 
     await expect.poll(() => deleteBody).not.toBeNull();
-    expect(deleteBody).toEqual({ confirmation: '탈퇴' });
+    expect(ACCEPTED, `FE 가 보낸 확인 문구 ${JSON.stringify(deleteBody)} 를 BE 가 받지 않는다`)
+      .toContain((deleteBody as { confirmation?: string } | null)?.confirmation);
   });
 });

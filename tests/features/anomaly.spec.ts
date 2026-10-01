@@ -134,14 +134,17 @@ test.describe('이상감지(화재)', () => {
     const streamer = await openAs('guardian1', '/guardian/stream');
     try {
       await prepareManualSession(streamer, camera.sessionId, camera.deviceId);
-      await sendFireFrames(streamer, camera.sessionId, firePath);
 
+      // AI 의 세션 생성 방송이 빠져도(AI-1) BE 가 60초마다 세션 목록을 다시 받아 구독한다 (2026-10-01 BE-1 반영).
+      // 그래서 재동기화 주기(60초)보다 넉넉히 기다린 뒤, 구독된 상태에서 화재 프레임을 보낸다.
       await expect
         .poll(() => countBackendLog(`세션 구독: sessionId=${camera.sessionId}`), {
-          timeout: 20_000,
-          message: 'BE 가 새 AI 세션을 구독해야 한다 (AI 가 세션 생성 시 live_streams 를 broadcast)',
+          timeout: 90_000,
+          intervals: [5_000],
+          message: 'BE 가 새 AI 세션을 구독해야 한다 (AI 방송 또는 BE 의 60초 재동기화)',
         })
         .toBeGreaterThan(0);
+      await sendFireFrames(streamer, camera.sessionId, firePath);
       await expect
         .poll(async () => (await findIncident(guardianApi, cameraLabel))?.detectedType, { timeout: 30_000 })
         .toBe('FIRE');

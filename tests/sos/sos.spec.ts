@@ -12,6 +12,7 @@ import { ACCOUNTS } from '../../src/accounts';
 import { env } from '../../src/env';
 import { expect, expectPageTitle, modal, test, waitForRealtime } from '../../src/fixtures';
 import { psqlRows, redisDelPattern, sqlStr } from '../../src/remote';
+import { suppressSosNotify } from '../../src/variables';
 
 const G1 = ACCOUNTS.guardian1;
 const W1 = ACCOUNTS.ward1;
@@ -129,15 +130,17 @@ test.describe('긴급 SOS', () => {
     expect(requests).toHaveLength(1);
   });
 
-  test('"119에 바로 연결" 설정이면 보호자 알림 없이 키패드만 뜬다', async ({ openAs }) => {
+  // 정책(.claude/rules/domain-security-policy.md): SOS 동작 설정은 119 화면을 띄우는 시점만 바꾸고,
+  // 어떤 설정이든 SOS 는 서버에 기록되고 보호자 알림이 나가야 한다. (변수 QA SOS-G01)
+  test('"119에 바로 연결" 설정이어도 키패드와 함께 SOS 가 서버로 간다', async ({ openAs }) => {
+    suppressSosNotify(W1.id);
     const ward = await openAs('ward1', '/ward');
     await chooseSosAction(ward, '119에 바로 연결');
     const requests = sosRequests(ward);
 
     await ward.getByRole('button', { name: /긴급 SOS/ }).click();
     await expect(ward.getByRole('dialog', { name: '119 신고 키패드' })).toBeVisible();
-    await expect(modal(ward, '긴급 SOS 전송')).toHaveCount(0);
-    expect(requests).toHaveLength(0);
+    await expect.poll(() => requests.length, { message: 'POST /api/ward/sos 가 나가야 한다', timeout: 5_000 }).toBe(1);
   });
 
   test('SOS 확인창에서 취소하면 아무것도 보내지 않는다', async ({ openAs }) => {
@@ -151,14 +154,15 @@ test.describe('긴급 SOS', () => {
     expect(requests).toHaveLength(0);
   });
 
-  test('연결된 보호자가 없는 피보호자는 SOS 를 누르면 바로 119 키패드가 뜬다', async ({ openAs }) => {
+  // 보호자가 0명이어도 서버는 이력만 남긴다(알림 대상 없음). 화면이 서버 호출을 건너뛰면 이력이 사라진다. (변수 QA SOS-G04)
+  test('연결된 보호자가 없는 피보호자도 SOS 를 누르면 119 키패드와 함께 이력이 남는다', async ({ openAs }) => {
     const ward = await openAs('ward3', '/ward/sos');
     const requests = sosRequests(ward);
     await expect(ward.getByRole('button', { name: /긴급 SOS/ })).toBeVisible();
 
     await ward.getByRole('button', { name: /긴급 SOS/ }).click();
     await expect(ward.getByRole('dialog', { name: '119 신고 키패드' })).toBeVisible();
-    expect(requests).toHaveLength(0);
+    await expect.poll(() => requests.length, { message: 'POST /api/ward/sos 가 나가야 한다', timeout: 5_000 }).toBe(1);
   });
 
   test('보호자 전화 카드를 누르면 "보호자에게 직접 전화" 이력이 남는다', async ({ openAs }) => {
