@@ -37,6 +37,8 @@ async function fillBasicInfo(page: Page, input: { role: 'WARD' | 'GUARDIAN'; nam
   const birth = page.locator('label', { hasText: '생년월일' }).locator('select');
   await birth.nth(0).selectOption('1985');
   await birth.nth(1).selectOption('04');
+  // 일(day) 목록은 연·월을 고른 뒤 다시 그려지므로, 옵션이 생길 때까지 기다린다
+  await expect(birth.nth(2).locator('option[value="15"]')).toHaveCount(1);
   await birth.nth(2).selectOption('15');
   await page.getByRole('button', { name: '주소 검색' }).click();
   await expect(page.getByPlaceholder('주소 검색으로 입력하세요')).toHaveValue(ADDRESS.address);
