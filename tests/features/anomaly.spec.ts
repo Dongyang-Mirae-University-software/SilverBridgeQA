@@ -95,18 +95,32 @@ async function listenAnomalyEvents(page: Page, guardianId: string) {
   return () => page.evaluate(() => (window as unknown as { __e2eAnomaly: Record<string, unknown>[] }).__e2eAnomaly);
 }
 
-async function findIncident(guardianApi: Api, cameraLabel: string) {
-  const page = await guardianApi.get<{ content: Incident[] }>(`/api/guardian/anomaly/history?wardId=${W1.id}&page=0&size=5`);
-  return page.content.find(item => item.cameraLabel === cameraLabel);
+async function recentIncidents(guardianApi: Api) {
+  const page = await guardianApi.get<{ content: Incident[] }>(`/api/guardian/anomaly/history?wardId=${W1.id}&page=0&size=20`);
+  return page.content;
 }
 
-function prepareRun() {
+/** 방 이름은 이전 실행과 겹칠 수 있어, 테스트 전에 있던 상황(before)은 빼고 찾는다 */
+async function findIncident(guardianApi: Api, cameraLabel: string, before: Set<number>) {
+  return (await recentIncidents(guardianApi)).find(item => item.cameraLabel === cameraLabel && !before.has(item.incidentId));
+}
+
+/** 카메라 이름은 정해진 방 목록 중 하나이고 한 방에 1대뿐이라, ward1 이 아직 쓰지 않은 방을 고른다 */
+async function pickFreeRoom(wardApi: Api) {
+  const rooms = await wardApi.get<{ label: string; registered: boolean }[]>('/api/ward/camera/rooms');
+  const free = rooms.find(room => !room.registered);
+  if (!free) throw new Error('ward1 의 모든 방에 카메라가 등록돼 있다 - 남은 테스트 카메라를 지워야 한다');
+  return free.label;
+}
+
+async function prepareRun(wardApi: Api, guardianApi: Api) {
   // 이전 실행의 쿨다운(이력 1분·알림 5분)이 남아 있으면 이번 감지가 기록·알림되지 않으므로 지운다
   redisDelPattern(`anomaly:*${W1.id}*`);
   redisDelPattern(`anomaly:*${G1.id}*`);
   return {
     firePath: fetchRemoteFile(env.fireImageRemotePath, 'fire-sample.jpg'),
-    cameraLabel: `E2E 거실 ${Date.now().toString(36)}`,
+    cameraLabel: await pickFreeRoom(wardApi),
+    before: new Set((await recentIncidents(guardianApi)).map(item => item.incidentId)),
     startedAt: new Date().toISOString(),
   };
 }
@@ -125,9 +139,9 @@ test.describe('이상감지(화재)', () => {
         '→ 세션 생성 시 live_streams 가 BE 로 전달되지 않음 → BE 는 카메라 등록·AI 재접속 때만 목록을 받으므로, ' +
         '카메라 등록 후에 송출을 시작하면 그 세션을 영영 구독하지 않는다 → 화재가 나도 이상감지 0건.',
     });
-    const { firePath, cameraLabel } = prepareRun();
     const wardApi = await apiAs('ward1');
     const guardianApi = await apiAs('guardian1');
+    const { firePath, cameraLabel, before } = await prepareRun(wardApi, guardianApi);
 
     // 정상 순서: 카메라(기기) 등록이 먼저, 송출은 나중
     const camera = await wardApi.post<Camera>('/api/ward/camera', { label: cameraLabel });
@@ -146,7 +160,7 @@ test.describe('이상감지(화재)', () => {
         .toBeGreaterThan(0);
       await sendFireFrames(streamer, camera.sessionId, firePath);
       await expect
-        .poll(async () => (await findIncident(guardianApi, cameraLabel))?.detectedType, { timeout: 30_000 })
+        .poll(async () => (await findIncident(guardianApi, cameraLabel, before))?.detectedType, { timeout: 30_000 })
         .toBe('FIRE');
       await stopManualSession(streamer);
     } finally {
@@ -162,9 +176,9 @@ test.describe('이상감지(화재)', () => {
     // 위 버그를 피하는 순서(송출 먼저 → 카메라 등록)로, 구독 이후 파이프라인 전체가 동작하는지 검증한다.
     // 카메라 등록 시 BE 가 AI 에 목록을 다시 요청하므로, 이미 돌고 있는 세션은 구독된다.
     test.setTimeout(240_000);
-    const { firePath, cameraLabel, startedAt } = prepareRun();
     const wardApi = await apiAs('ward1');
     const guardianApi = await apiAs('guardian1');
+    const { firePath, cameraLabel, startedAt, before } = await prepareRun(wardApi, guardianApi);
     const adminApi = await apiAs('admin');
 
     // 순서: 1) 카메라 등록(sessionId 발급)  2) 화면에서 그 sessionId 로 송출 시작
@@ -204,7 +218,7 @@ test.describe('이상감지(화재)', () => {
       let incident!: Incident;
       await test.step('BE: 보호자 이력에 화재 상황이 생긴다', async () => {
         await expect
-          .poll(async () => (incident = (await findIncident(guardianApi, cameraLabel))!)?.detectedType, {
+          .poll(async () => (incident = (await findIncident(guardianApi, cameraLabel, before))!)?.detectedType, {
             timeout: 60_000,
             message: 'AI danger=true → BE anomaly_incident 생성',
           })
@@ -246,7 +260,7 @@ test.describe('이상감지(화재)', () => {
 
       await test.step('보호자가 "실제 상황"으로 판정하면 판정 상태가 반영된다', async () => {
         await guardianApi.post(`/api/guardian/anomaly/${incident.incidentId}/feedback`, { verdict: 'REAL' });
-        const updated = (await findIncident(guardianApi, cameraLabel))!;
+        const updated = (await findIncident(guardianApi, cameraLabel, before))!;
         expect(updated.myVerdict).toBe('REAL');
         expect(updated.reviewStatus).toBe('REAL');
       });
