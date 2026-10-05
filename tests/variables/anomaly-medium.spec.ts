@@ -2,7 +2,7 @@
  * 변수 QA - 이상감지(화재) 중간 심각도 발견 항목
  *
  * 안전 원칙
- * - 임시 사용자(tempUser)와 이 파일이 만든 행만 쓴다. 실제 화재 신호(사진)는 보내지 않는다.
+ * - 임시 사용자(tempUser)와 이 파일이 만든 행만 쓴다. 실제 화재 신호(사진)는 ANOM-G10 만 보낸다(사용자 승인 2026-10-05, src/fire.ts).
  * - AI 서버(/api/streams)는 현재 내려가 있어(AI-6) 화면 테스트는 page.route 로 응답을 흉내 낸다.
  * - 판정 동시성 테스트는 임시 보호자에게 재확인 안내가 나가지 않도록 anomaly_review_conflict_log 를 미리 채운다.
  */
@@ -11,7 +11,8 @@ import { spawn } from 'node:child_process';
 import { Page } from '@playwright/test';
 
 import { env } from '../../src/env';
-import { expect, test } from '../../src/fixtures';
+import { fireImage, listenAnomalyEvents, sendFireFrames, startManualSession, stopManualSession, waitSubscribed } from '../../src/fire';
+import { expect, test, waitForRealtime } from '../../src/fixtures';
 import { psql, psqlRows, sqlStr } from '../../src/remote';
 import { connect } from '../../src/variables';
 
@@ -205,12 +206,67 @@ test.describe('이상감지 - 중간 심각도', () => {
     ).toEqual([]);
   });
 
-  test('[ANOM-G10] 이용 제한(RESTRICTED)된 보호자는 이상감지 실시간(WS) 이벤트를 더 이상 받지 않는다', async () => {
-    test.fixme(
-      true,
-      '화재 이벤트를 발생시켜야 검증되는데 AI 서버가 내려가 있고(AI-6) 실제 화재 신호는 다른 수신자에게 FCM 을 보내므로 안전하게 재현할 수 없음. ' +
-        '재현 절차: 임시 보호자 STOMP 연결 유지 -> 관리자 API 로 RESTRICTED -> 임시 ward 세션에 화재 신호 -> /topic/{id}/anomaly-detected 도착 여부 확인',
-    );
+  test('[ANOM-G10] 이용 제한(RESTRICTED)된 보호자는 이상감지 실시간(WS) 이벤트를 더 이상 받지 않는다', async ({
+    tempUser,
+    loginAs,
+    openAs,
+  }) => {
+    // 공유 AI 서버에 실제 화재 사진을 보낸다(사용자 승인 2026-10-05). 임시 사용자라 실제 푸시·문자는 나가지 않는다
+    test.setTimeout(240_000);
+    const ward = await tempUser('WARD');
+    const active = await tempUser('GUARDIAN'); // 대조군: 정상 보호자는 이벤트를 받아야 한다
+    const target = await tempUser('GUARDIAN'); // 이용 제한할 보호자
+    const admin = await tempUser('ADMIN');
+    connect(active.id, ward.id);
+    connect(target.id, ward.id);
+    const w = await loginAs(ward);
+    const a = await loginAs(active);
+    const t = await loginAs(target);
+    const ad = await loginAs(admin);
+
+    // 두 보호자 모두 화면을 열어 실시간 연결을 붙여 둔다
+    const activePage = await openAs(a.who, '/guardian');
+    await waitForRealtime(activePage);
+    const activeEvents = await listenAnomalyEvents(activePage, active.id);
+    const targetPage = await openAs(t.who, '/guardian');
+    await waitForRealtime(targetPage);
+    const targetEvents = await listenAnomalyEvents(targetPage, target.id);
+
+    // 연결이 열린 상태에서 관리자가 이용 제한
+    const restrict = await ad.api.raw('PATCH', `/api/admin/user/${target.id}`, { status: 'RESTRICTED', statusReason: 'qa' });
+    expect(restrict.status(), '준비: 관리자가 보호자를 이용 제한').toBe(200);
+
+    const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: '거실' });
+    const streamer = await openAs(a.who, '/guardian/stream');
+    try {
+      await startManualSession(streamer, camera.sessionId, camera.deviceId);
+      await waitSubscribed(camera.sessionId);
+      await sendFireFrames(streamer, camera.sessionId, fireImage());
+      await expect
+        .poll(async () => (await activeEvents()).length, { timeout: 30_000, message: '준비: 정상 보호자에게 화재 이벤트가 와야 한다' })
+        .toBeGreaterThan(0);
+      // 같은 방송이 제한된 보호자에게도 갔는지 조금 더 기다린 뒤 확인
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+    } finally {
+      await stopManualSession(streamer, camera.sessionId);
+      await w.api.call('DELETE', `/api/ward/camera/${camera.id}`).catch(() => undefined);
+    }
+
+    // 0건이 "서버가 걸러서"인지 "연결이 끊겨서"인지 구분해 남긴다
+    const targetState = await targetPage
+      .evaluate(() => ({
+        url: location.pathname,
+        connected: (window as unknown as { __connectionStompClient?: { connected: boolean } }).__connectionStompClient?.connected ?? null,
+      }))
+      .catch(error => ({ url: 'evaluate 실패', connected: null, error: String(error) }));
+    test.info().annotations.push({ type: '제한된 보호자 화면 상태', description: JSON.stringify(targetState) });
+    const received = await targetEvents().catch(() => [] as Record<string, unknown>[]);
+    test.info().annotations.push({ type: '제한된 보호자가 받은 이벤트', description: `${received.length}건` });
+    expect(
+      received.length,
+      `이용 제한된 보호자의 열린 실시간 연결로 화재 이벤트가 ${received.length}건 도착했다(피보호자 이름·위치 포함). ` +
+        '실시간 방송 대상도 이용 가능한 계정만 고르거나, 제한할 때 실시간 연결을 끊어야 한다',
+    ).toBe(0);
   });
 
   test('[ANOM-G11] 이상감지 모니터는 분석 불가(unknown)와 AI 연결 끊김을 "이상 없음"으로 보여주지 않는다', async ({ tempUser, loginAs, openAs }) => {
