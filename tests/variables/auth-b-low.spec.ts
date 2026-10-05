@@ -208,16 +208,17 @@ test.describe('API 문서와 구현', () => {
       const actual = await post('/api/auth/logout', undefined);
       const responses = docs.paths['/api/auth/logout']?.post?.responses ?? {};
       test.info().annotations.push({ type: '로그아웃(헤더 없음)', description: `실제 ${actual.status}, 문서 ${JSON.stringify(responses)}` });
-      const doc400 = responses['400']?.description ?? '';
-      expect.soft(
-        doc400.includes('헤더 누락') && actual.status !== 400,
-        `문서는 "${doc400}" (400) 라고 하지만 실제는 ${actual.status} (${messageOf(actual)})`,
-      ).toBe(false);
+      // 문서에서 '헤더 누락'을 설명하는 응답 코드가 실제 응답 코드와 같아야 한다
+      const documented = Object.entries(responses).find(([, r]) => (r.description ?? '').includes('헤더 누락'))?.[0];
+      expect.soft(documented, `문서가 헤더 누락을 ${documented} 로 설명하지만 실제는 ${actual.status} (${messageOf(actual)})`).toBe(
+        String(actual.status),
+      );
     });
 
     await test.step('카카오 가입: 문서가 말하는 pending 유지 시간이 코드 상수(KAKAO_PENDING_TTL=30분)와 같다', async () => {
       const description = docs.paths['/api/auth/signup/kakao']?.post?.description ?? '';
-      const minutes = Number(/kakaoId는 서버에서\s*(\d+)\s*분/.exec(description)?.[1]);
+      // 문구가 "kakaoId는 서버에서 N분" → "가입 대기 정보(kakaoId·pendingToken)는 서버에서 N분간" 으로 바뀌어 둘 다 읽는다
+      const minutes = Number(/kakaoId[^\n]*?서버에서\s*(\d+)\s*분/.exec(description)?.[1]);
       test.info().annotations.push({ type: '문서의 pending 유지 시간(분)', description: String(minutes) });
       expect.soft(minutes, `문서는 ${minutes}분이라 하지만 구현은 30분(KAKAO_PENDING_TTL)이다`).toBe(30);
     });
