@@ -2,7 +2,7 @@
  * 변수 QA - 이상감지(화재) 낮은 심각도 발견 항목
  *
  * 안전 원칙
- * - 임시 사용자(tempUser)와 이 파일이 만든 행만 쓴다. 실제 화재 신호(사진)는 보내지 않는다(AI 서버도 내려가 있음, AI-6).
+ * - 임시 사용자(tempUser)와 이 파일이 만든 행만 쓴다. 실제 화재 신호(사진)는 ANOM-G08 만 보낸다(사용자 승인 2026-10-05, src/fire.ts).
  * - 재촉 스케줄러(5분 주기)는 공유 서버 것을 그대로 쓰되, 임시 보호자에게는 FCM 토큰이 없어 실제 푸시는 나가지 않는다.
  *   동수 재확인 안내가 나가지 않도록 anomaly_review_conflict_log 를 미리 채운다.
  */
@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import { request } from '@playwright/test';
 
 import { env } from '../../src/env';
+import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed } from '../../src/fire';
 import { expect, test } from '../../src/fixtures';
 import { psql, psqlRows, sqlStr } from '../../src/remote';
 import { connect } from '../../src/variables';
@@ -183,15 +184,53 @@ test.describe('이상감지 - 낮은 심각도', () => {
     ).toBe(true);
   });
 
-  test('[ANOM-G08] 사용 중지(isActive=false)한 카메라의 화재 신호는 이력·알림을 만들지 않거나 보호자 목록과 일관되게 처리된다', async () => {
-    test.fixme(
-      true,
-      '화재 신호는 BE 가 클라이언트로 붙은 AI 서버 WS(live_streams / latest_analysis)로만 들어오고, BE 에는 신호 주입용 엔드포인트가 없으며 WS 주소는 서버 설정이라 흉내 낼 수 없다. ' +
-        'AI 서버는 다시 살아났지만(2026-09-30 확인: /api/streams/v1/live-streams 200, BE 로그 "AI WS 연결됨"), 재현하려면 공유 AI 서버에 실제 화재 프레임을 보내 탐지를 일으켜야 해서 ' +
-        '사용자 승인 없이는 실행하지 않는다 (자동 실행 권한에서도 거부됨). ' +
-        '재현 절차: 임시 ward 카메라 등록 -> 송출/구독 -> PATCH /api/ward/camera/{id} {isActive:false} -> ' +
-        '화재 프레임 전송(anomaly:notify:{userId}:{sessionId}:FIRE 선점으로 알림 억제) -> anomaly_incident 생성 여부(기대: 생성되지 않음) 확인',
-    );
+  test('[ANOM-G08] 사용 중지(isActive=false)한 카메라의 화재 신호는 이력·알림을 만들지 않거나 보호자 목록과 일관되게 처리된다', async ({
+    tempUser,
+    loginAs,
+    openAs,
+  }) => {
+    // 공유 AI 서버에 실제 화재 사진을 보낸다(사용자 승인 2026-10-05). 임시 사용자라 실제 푸시·문자는 나가지 않는다
+    test.setTimeout(240_000);
+    const ward = await tempUser('WARD');
+    const guardian = await tempUser('GUARDIAN');
+    connect(guardian.id, ward.id);
+    const w = await loginAs(ward);
+    const g = await loginAs(guardian);
+
+    const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: '거실' });
+    const streamer = await openAs(g.who, '/guardian/stream');
+    let incidents = 0;
+    try {
+      await startManualSession(streamer, camera.sessionId, camera.deviceId);
+      await waitSubscribed(camera.sessionId);
+      await w.api.call('PATCH', `/api/ward/camera/${camera.id}`, { isActive: false });
+      await sendFireFrames(streamer, camera.sessionId, fireImage());
+      // 감지는 몇 초 안에 기록된다. 끝까지 0건이면 꺼진 카메라는 이력을 만들지 않는 것이다
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline && incidents === 0) {
+        incidents = Number(psql(`SELECT count(*) FROM anomaly_incident WHERE ward_id = ${sqlStr(ward.id)};`));
+        if (incidents === 0) await new Promise(resolve => setTimeout(resolve, 3_000));
+      }
+    } finally {
+      await stopManualSession(streamer, camera.sessionId);
+      await w.api.call('DELETE', `/api/ward/camera/${camera.id}`).catch(() => undefined);
+    }
+    test.info().annotations.push({ type: '꺼진 카메라의 화재 이력', description: `${incidents}건` });
+    if (incidents === 0) return;
+
+    // 이력이 생긴다면 "사용 중지는 감지·알림을 끄지 않는다"는 뜻이 API 문서에 적혀 있어야 사용자가 오해하지 않는다
+    const ctx = await request.newContext({ baseURL: env.apiUrl });
+    const docs = await (await ctx.get('/v3/api-docs')).json();
+    await ctx.dispose();
+    const patch = docs.paths['/api/ward/camera/{id}']?.patch ?? {};
+    const isActiveDoc = docs.components?.schemas?.CameraUpdateRequest?.properties?.isActive?.description ?? '';
+    const text = `${patch.description ?? ''} ${isActiveDoc}`;
+    test.info().annotations.push({ type: '문서(isActive)', description: isActiveDoc });
+    expect(
+      /감지|알림/.test(text),
+      `꺼진 카메라에서도 화재 이력이 ${incidents}건 생겼는데, 카메라 수정 API 문서(isActive: "${isActiveDoc}")에 ` +
+        '"사용 중지해도 감지·알림은 계속된다"는 설명이 없다. 보호자 목록에서는 사라지는 카메라라 사용자가 감시가 꺼졌다고 오해한다',
+    ).toBe(true);
   });
 
   test('[ANOM-G09] 건별 재촉이 나간 같은 주기에 미응답 요약이 이어서 발송되지 않는다', async ({ tempUser }) => {
