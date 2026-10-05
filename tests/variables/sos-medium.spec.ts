@@ -128,11 +128,12 @@ test.describe('SOS 알림 서버 경로', () => {
     expect(results, '전화번호·토큰이 없으니 전달 실패로 기록되어야 한다').not.toMatch(/DELIVERED|SMS_FALLBACK/);
 
     expect
-      .soft(redis('EXISTS', cooldownKey(ward.id)), '아무에게도 전달되지 않았는데 30초 쿨다운 키가 남아 있다')
+      .soft(redis('EXISTS', cooldownKey(ward.id)), '아무에게도 전달되지 않았는데 알림 쿨다운 키가 남아 있다')
       .toBe('0');
 
-    // 10초 뒤 다시 SOS: 미전달이었으니 다시 발송을 시도해야 한다
-    await new Promise(resolve => setTimeout(resolve, 10_000));
+    // 쿨다운(BE 기본 10초) 안인 3초 뒤 다시 SOS: 미전달이었으니 다시 발송을 시도해야 한다
+    // (10초 이상 기다리면 키가 잘못 남아 있어도 만료돼 회귀를 놓친다)
+    await new Promise(resolve => setTimeout(resolve, 3_000));
     await api.post('/api/ward/sos', {});
     await expect
       .poll(() => notificationLogCount(guardian.id, ward.id), {
@@ -197,8 +198,8 @@ test.describe('웹 보호자 SOS 토스트', () => {
       await expect(toasts.filter({ hasText: '긴급 도움을 요청했습니다' })).toBeVisible({ timeout: 20_000 });
     });
 
-    await test.step('쿨다운 키를 지우고(30초 대기 대신) 두 번째 SOS', async () => {
-      await expect.poll(() => redis('EXISTS', cooldownKey(ward.id))).toBe('1');
+    await test.step('쿨다운 키를 지우고(10초 대기 대신) 두 번째 SOS', async () => {
+      // 키가 이미 만료됐을 수도 있어 존재 여부는 단언하지 않는다(쿨다운 10초)
       redis('DEL', cooldownKey(ward.id));
       await w.api.post('/api/ward/sos', {});
     });

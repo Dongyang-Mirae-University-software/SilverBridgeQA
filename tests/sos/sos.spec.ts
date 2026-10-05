@@ -45,14 +45,14 @@ function sosRequests(page: Page) {
   return bodies;
 }
 
-/** 30초 알림 쿨다운 해제 (쿨다운 안이면 이력만 남고 알림은 생략되는 게 정상 동작이라) */
+/** 알림 쿨다운(BE 기본 10초) 해제 (쿨다운 안이면 이력만 남고 알림은 생략되는 게 정상 동작이라) */
 function clearSosCooldown() {
   redisDelPattern(`sos:notify:cooldown:${W1.id}`);
 }
 
 test.describe('긴급 SOS', () => {
   test('피보호자가 SOS 를 보내면 보호자에게 실시간 알림이 오고 SOS 이력에 기록된다', async ({ openAs }) => {
-    // 알림까지 검증하는 건 이 테스트뿐이다. 나머지는 쿨다운 안에서 이력만 남는다 (SMS 폴백 시도 최소화)
+    // 알림까지 검증하는 건 이 테스트뿐이다. 나머지는 suppressSosNotify 로 쿨다운 키를 넣어 이력만 남긴다 (SMS 폴백 시도 최소화)
     // 헤드리스 브라우저엔 FCM 토큰이 없어서 이 테스트는 실행마다 Solapi 로 SMS 1건을 실제 발송 요청한다.
     test.skip(env.skipSms, 'E2E_SKIP_SMS=1: 실제 SMS 발송 요청이 생기는 테스트');
     clearSosCooldown();
@@ -105,6 +105,7 @@ test.describe('긴급 SOS', () => {
   });
 
   test('119 화면 열기를 누르면 테스트용 119 키패드가 뜨고 실제 발신은 막혀 있다', async ({ openAs }) => {
+    suppressSosNotify(W1.id);
     const ward = await openAs('ward1', '/ward');
     await chooseSosAction(ward, '보호자에게 먼저 알림');
 
@@ -120,6 +121,7 @@ test.describe('긴급 SOS', () => {
   });
 
   test('기본 설정(119 연결 + 보호자 알림)에서는 SOS 를 보낸 뒤 바로 119 키패드가 뜬다', async ({ openAs }) => {
+    suppressSosNotify(W1.id);
     const ward = await openAs('ward1', '/ward');
     await chooseSosAction(ward, '119 연결 + 보호자 알림');
     const requests = sosRequests(ward);
@@ -166,6 +168,7 @@ test.describe('긴급 SOS', () => {
   });
 
   test('보호자 전화 카드를 누르면 "보호자에게 직접 전화" 이력이 남는다', async ({ openAs }) => {
+    suppressSosNotify(W1.id);
     const ward = await openAs('ward1', '/ward/sos');
     const call = ward.getByRole('link', { name: `${G1.name}에게 전화하기` });
     await expect(call).toHaveAttribute('href', `tel:${G1.phone}`);
