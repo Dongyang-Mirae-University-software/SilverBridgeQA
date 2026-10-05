@@ -18,6 +18,21 @@ npx playwright test tests/sos          # 폴더 하나만
 npx playwright test -g "연결 요청"      # 이름으로 골라서
 ```
 
+### 브라우저별 실행 (Chrome · Edge)
+
+지원 브라우저는 **Chrome 과 Edge**(Chromium 계열)다. 기본 `npm test` 계열(`e2e`·`variables`)은 Playwright 내장 Chromium 이고,
+실제 Chrome·Edge 는 아래 전용 스크립트로 돌린다. **브라우저는 한 명령으로 연달아 돌리지 말고 따로 실행한다**
+(흐름 QA 가 고정 E2E 계정의 상태를 바꾸므로 매 실행 시작 때 `setup` 이 계정을 다시 만들어야 한다).
+
+```bash
+npm run install:browsers          # 처음 한 번: 실제 Chrome·Edge 설치 (외부 다운로드, WSL 에서는 sudo 필요할 수 있음)
+npm run test:smoke:chrome         # 스모크      (test:smoke:edge)
+npm run test:flow:chrome          # 흐름 QA     (test:flow:edge)
+npm run test:variables:chrome     # 변수 QA     (test:variables:edge)
+```
+
+리포트(`reports/html`·`results.json`)는 실행마다 덮어쓰이므로 브라우저별 결과가 필요하면 실행 후 `reports/` 를 옮겨 둔다.
+
 처음 한 번만:
 
 ```bash
