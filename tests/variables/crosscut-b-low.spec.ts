@@ -225,7 +225,9 @@ test.describe('횡단 - 연결 요청·접속 상태', () => {
     ).toBeLessThan(CYCLES);
   });
 
-  test('[XCUT-G30] 접속 중인 사용자는 ws:connected 키가 있고, 탭 하나를 닫아도 다른 탭이 남아 있으면 유지된다', async ({ tempUser, loginAs, openAs }) => {
+  test('[XCUT-G30] 접속 중 표시(ws:connected)는 제대로 기록되거나, 쓰지 않으면 남기지 않는다', async ({ tempUser, loginAs, openAs }) => {
+    // 2026-10-02 BE 는 읽는 곳이 없던 ws:connected 키를 제거했다(RedisKeys 주석). 고칠 방향 중 "안 쓰면 삭제"에 해당하므로
+    // 연결 뒤 키가 없으면 통과이고, 키를 다시 쓰게 되면 다중 탭에서도 정확히 유지되는지 본다.
     const ward = await tempUser('WARD');
     const { who } = await loginAs(ward);
     const key = `ws:connected:${ward.id}`;
@@ -235,8 +237,7 @@ test.describe('횡단 - 연결 요청·접속 상태', () => {
     await waitForRealtime(tabA);
     await tabA.waitForTimeout(1_500);
     const afterConnect = exists();
-    test.info().annotations.push({ type: 'WS 연결 후 ws:connected 키', description: afterConnect ? '있음' : '없음' });
-    expect.soft(afterConnect, 'STOMP 연결이 됐는데 ws:connected 키가 생성되지 않는다 (CONNECTED 프레임에는 세션 속성이 없어 userId 가 null)').toBe(true);
+    test.info().annotations.push({ type: 'WS 연결 후 ws:connected 키', description: afterConnect ? '있음(기록 방식)' : '없음(키 제거 방식)' });
 
     if (afterConnect) {
       const tabB = await tabA.context().newPage();

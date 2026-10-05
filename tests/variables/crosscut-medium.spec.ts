@@ -262,27 +262,31 @@ test.describe('횡단 - 세션·토큰', () => {
 
 test.describe('횡단 - 계정·설정', () => {
   test('[XCUT-G16] 이메일은 대소문자를 구분하지 않고 중복 확인·로그인에 쓰인다', async ({ tempUser }) => {
+    // 2026-10-05: BE 가 이메일을 소문자로 바꿔 저장하고 기존 데이터도 변환했다(유일 인덱스 uq_users_email_lower).
+    // 그래서 DB 에 대문자 이메일을 직접 넣는 대신, 소문자로 저장된 계정에 대문자를 섞어 입력하는 실제 상황을 본다.
     const user = await tempUser('GUARDIAN');
-    // 가입 때 "E2E.Temp..." 처럼 대문자를 섞어 입력한 계정 (e2e. 접두어는 정리 패턴 때문에 소문자로 둔다)
     const [local, domain] = user.email.split('@');
-    const mixed = `e2e.${local.slice('e2e.'.length).toUpperCase()}@${domain}`;
+    const mixed = `${local.toUpperCase()}@${domain.toUpperCase()}`;
     expect(mixed).not.toBe(user.email);
-    psql(`UPDATE users SET email = ${sqlStr(mixed)} WHERE id = ${sqlStr(user.id)};`);
+
+    await test.step('준비: DB 에 대소문자가 섞인 이메일이 없다', async () => {
+      expect(psql(`SELECT count(*) FROM users WHERE email <> lower(email);`), '대문자가 섞인 이메일이 저장돼 있다').toBe('0');
+    });
 
     redisDelPattern('rate:email-check:*');
     relaxRateLimits();
 
-    await test.step('소문자 이메일로 중복 확인 -> 이미 가입된 이메일이어야 한다', async () => {
+    await test.step('대문자를 섞은 이메일로 중복 확인 -> 이미 가입된 이메일이어야 한다', async () => {
       const ctx = await request.newContext({ baseURL: env.apiUrl });
-      const res = await ctx.post(EMAIL_CHECK, { data: { email: user.email } });
+      const res = await ctx.post(EMAIL_CHECK, { data: { email: mixed } });
       expect
         .soft(res.status(), `대소문자만 다른 이메일을 사용 가능(200)으로 판정해 중복 계정 가입이 열린다: ${await res.text()}`)
         .not.toBe(200);
       await ctx.dispose();
     });
 
-    await test.step('소문자 이메일로 로그인 -> 같은 계정으로 로그인돼야 한다', async () => {
-      const error = await Api.signinWithRetry(user.email, user.password).then(
+    await test.step('대문자를 섞은 이메일로 로그인 -> 같은 계정으로 로그인돼야 한다', async () => {
+      const error = await Api.signinWithRetry(mixed, user.password).then(
         () => null,
         (e: unknown) => e,
       );

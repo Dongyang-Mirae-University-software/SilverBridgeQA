@@ -238,8 +238,9 @@ test.describe('카카오·이메일 가입 선점', () => {
   });
 
   test('[AUTH-G08] 일반 가입으로 카카오 대체 이메일(kakao_{id}@kakao.com)을 선점할 수 없다', async () => {
-    const tag = suffix();
-    const email = `kakao_e2e${tag}@kakao.com`;
+    // 카카오가 이메일을 주지 않을 때 쓰는 실제 형식은 kakao_{숫자 회원번호}@kakao.com 이다(BE 는 이 형식만 예약).
+    // 실제 회원번호와 겹치지 않게 9 로 시작하는 13자리 이상 숫자를 쓰고, 끝나면 지운다
+    const email = `kakao_9${Date.now()}@kakao.com`;
     const phone = uniqueTestPhone();
     const nonce = randomUUID();
 
