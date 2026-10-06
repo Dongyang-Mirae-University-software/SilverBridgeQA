@@ -142,7 +142,9 @@ test.describe('이상감지 - 낮은 심각도', () => {
     ).toEqual([]);
   });
 
-  test('[ANOM-G06] 동수(CONFLICTED) 상황에서도 미응답 보호자는 건별 재촉 또는 동수 안내를 받는다', async ({ tempUser, loginAs }) => {
+  // 10/5 BE 가 정책으로 확정: 동수(CONFLICTED)는 이미 누군가 답한 뒤라 미응답 보호자에게 건별 재촉도 동수 안내도 보내지 않는다.
+  // 이 테스트는 그 정책이 지켜지는지(=알림이 가지 않는지)와 같은 시점의 미응답(PENDING) 상황에는 재촉이 가는지를 함께 고정한다.
+  test('[ANOM-G06] 동수(CONFLICTED) 상황의 미응답 보호자에게는 재촉·동수 안내를 보내지 않는다 (10/5 확정 정책)', async ({ tempUser, loginAs }) => {
     test.setTimeout(540_000);
     const hour = kstHour();
     test.skip(hour >= 22 || hour < 8, `야간(22~08 KST, 현재 ${hour}시)에는 재촉 스케줄러가 발송을 미루므로 검증할 수 없다`);
@@ -176,12 +178,8 @@ test.describe('이상감지 - 낮은 심각도', () => {
       psql(`SELECT count(*) FROM anomaly_review_conflict_log WHERE incident_id = ${target} AND guardian_id = ${sqlStr(gc.id)};`) === '1';
     test.info().annotations.push({ type: '결과', description: `C 재촉기록(대상 상황)=${gotReminder}, C 동수안내기록=${gotConflictNotice}` });
 
-    expect(
-      gotReminder || gotConflictNotice,
-      '동수(CONFLICTED)인 상황의 미응답 보호자 C 에게 건별 재촉도, 동수 안내도 기록되지 않았다. ' +
-        '같은 시점에 PENDING 인 대조군 상황에는 C 재촉이 기록되어 스케줄러는 돌았다. 재촉 후보 쿼리는 PENDING 만 대상으로 하고 ' +
-        '동수 안내는 응답자만 대상이라, 동수를 깰 수 있는 미응답자가 아무 요청도 받지 못한다',
-    ).toBe(true);
+    expect.soft(gotReminder, '정책과 달리 동수(CONFLICTED) 상황의 미응답 보호자 C 에게 건별 재촉이 기록됐다').toBe(false);
+    expect.soft(gotConflictNotice, '정책과 달리 동수(CONFLICTED) 상황의 미응답 보호자 C 에게 동수 안내가 기록됐다').toBe(false);
   });
 
   test('[ANOM-G08] 사용 중지(isActive=false)한 카메라의 화재 신호는 이력·알림을 만들지 않거나 보호자 목록과 일관되게 처리된다', async ({
