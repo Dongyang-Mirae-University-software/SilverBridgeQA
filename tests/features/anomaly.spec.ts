@@ -18,6 +18,7 @@ import { Page } from '@playwright/test';
 import { ACCOUNTS } from '../../src/accounts';
 import { Api } from '../../src/api';
 import { env } from '../../src/env';
+import { suppressAnomalySmsFallback } from '../../src/fire';
 import { expect, test, waitForRealtime } from '../../src/fixtures';
 import { countBackendLog, fetchRemoteFile, psqlRows, redisDelPattern, sqlStr } from '../../src/remote';
 
@@ -117,6 +118,8 @@ async function prepareRun(wardApi: Api, guardianApi: Api) {
   // 이전 실행의 쿨다운(이력 1분·알림 5분)이 남아 있으면 이번 감지가 기록·알림되지 않으므로 지운다
   redisDelPattern(`anomaly:*${W1.id}*`);
   redisDelPattern(`anomaly:*${G1.id}*`);
+  // 헤드리스 브라우저엔 FCM 토큰이 없어 이상감지 문자 대체 발송(10/6 결정) 대상이 된다 - 문자만 막고 알림 기록·실시간은 그대로 둔다
+  suppressAnomalySmsFallback(W1.id);
   return {
     firePath: fetchRemoteFile(env.fireImageRemotePath, 'fire-sample.jpg'),
     cameraLabel: await pickFreeRoom(wardApi),
@@ -239,12 +242,15 @@ test.describe('이상감지(화재)', () => {
             { timeout: 30_000 },
           )
           .toEqual(expect.arrayContaining([`${G1.id}:ANOMALY_DETECTED`, `${W1.id}:ANOMALY_DETECTED_SELF`]));
-        const channels = psqlRows(`SELECT channel_results::text FROM notification_log
-                                   WHERE ward_id = ${sqlStr(W1.id)} AND type LIKE 'ANOMALY_DETECTED%'
-                                     AND created_at >= ${sqlStr(startedAt)}::timestamptz;`).flat().join(' ');
-        test.info().annotations.push({ type: '이상감지 알림 채널 결과', description: channels });
-        expect(channels).not.toContain('"SMS"');
-        expect(channels).not.toContain('"KAKAO_ALIMTALK"');
+        const rows = psqlRows(`SELECT channel_results::text FROM notification_log
+                               WHERE ward_id = ${sqlStr(W1.id)} AND type LIKE 'ANOMALY_DETECTED%'
+                                 AND created_at >= ${sqlStr(startedAt)}::timestamptz;`).flat();
+        test.info().annotations.push({ type: '이상감지 알림 채널 결과', description: rows.join(' ') });
+        // 10/6 결정으로 푸시 미전달 시 문자 대체 시도가 기록될 수 있다. 테스트가 상한 키로 막아 두므로(RATE_LIMITED)
+        // "문자·알림톡이 실제로 전달되지 않았다"를 본다
+        const attempts = rows.flatMap(r => JSON.parse(r) as { channel: string; status: string; reason?: string | null }[]);
+        const sent = attempts.filter(a => (a.channel === 'SMS' || a.channel === 'KAKAO_ALIMTALK') && a.status === 'DELIVERED');
+        expect(sent, '문자·알림톡이 실제로 나갔다').toEqual([]);
       });
 
       await test.step('보호자 브라우저에 실시간 anomaly-detected 이벤트가 도착했다', async () => {

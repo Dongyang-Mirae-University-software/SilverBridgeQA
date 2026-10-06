@@ -8,7 +8,26 @@ import { Page } from '@playwright/test';
 
 import { env } from './env';
 import { expect } from './fixtures';
-import { countBackendLog, fetchRemoteFile } from './remote';
+import { countBackendLog, fetchRemoteFile, psqlRows, redis, sqlStr } from './remote';
+
+/**
+ * 이상감지 알림의 "푸시 미전달 시 문자 대체 발송"(2026-10-06 결정)을 이 피보호자와 연결된 보호자 전원에 대해 막는다.
+ * FCM 토큰이 없는 테스트 계정은 문자 대체 대상이라, 막지 않으면 Solapi 로 실제 문자 접수(비용)가 생긴다.
+ *
+ * BE 의 문자 대체 시간당 상한 카운터(SmsFallbackLimiter, 키 notify:sms-fallback:{종류}:{수신자ID})를 상한보다 크게 채워 둔다.
+ * 상한은 문자만 건너뛰고 푸시·실시간 이벤트·이력·쿨다운은 건드리지 않으므로, 실시간 이벤트를 보는 테스트도 그대로 동작한다.
+ * 연결(connect)을 만든 뒤, 화재 신호를 보내기 전에 부른다.
+ */
+export function suppressAnomalySmsFallback(wardId: string, seconds = 3600) {
+  const guardians = psqlRows(`SELECT guardian_id FROM connection WHERE ward_id = ${sqlStr(wardId)} AND status = 'ACTIVE';`).map(r => r[0]);
+  const recipients = [wardId, ...guardians];
+  for (const id of recipients) {
+    for (const type of ['ANOMALY_DETECTED', 'ANOMALY_DETECTED_SELF']) {
+      redis('SET', `notify:sms-fallback:${type}:${id}`, '1000000', 'EX', String(seconds));
+    }
+  }
+  return recipients;
+}
 
 /** AI 서버는 STREAM_SAMPLE_EVERY_N_FRAMES(=5) 프레임마다 한 번 분석한다 */
 const FRAMES_TO_SEND = 6;

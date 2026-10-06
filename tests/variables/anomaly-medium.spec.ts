@@ -11,7 +11,15 @@ import { spawn } from 'node:child_process';
 import { Page } from '@playwright/test';
 
 import { env } from '../../src/env';
-import { fireImage, listenAnomalyEvents, sendFireFrames, startManualSession, stopManualSession, waitSubscribed } from '../../src/fire';
+import {
+  fireImage,
+  listenAnomalyEvents,
+  sendFireFrames,
+  startManualSession,
+  stopManualSession,
+  suppressAnomalySmsFallback,
+  waitSubscribed,
+} from '../../src/fire';
 import { expect, test, waitForRealtime } from '../../src/fixtures';
 import { psql, psqlRows, sqlStr } from '../../src/remote';
 import { connect } from '../../src/variables';
@@ -219,6 +227,7 @@ test.describe('이상감지 - 중간 심각도', () => {
     const admin = await tempUser('ADMIN');
     connect(active.id, ward.id);
     connect(target.id, ward.id);
+    suppressAnomalySmsFallback(ward.id); // FCM 토큰 없는 임시 계정이라 문자 대체 발송을 막는다(실시간 이벤트는 그대로)
     const w = await loginAs(ward);
     const a = await loginAs(active);
     const t = await loginAs(target);
