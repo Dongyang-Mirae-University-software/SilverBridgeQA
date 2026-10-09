@@ -56,8 +56,11 @@ export function resetE2eAccounts() {
   `);
 
   // 이전 실행이 남긴 로그인 실패 카운트·잠금 (키: login:fail|lock:{userId})
+  // 같은 보호자→피보호자 반복 연결 요청 카운터(24시간, 5회 넘으면 429 CONNECTION_REQUEST_COOLDOWN, 10/5 XCUT-G29)도
+  // 고정 계정끼리는 실행마다 쌓이므로 지운다 (키: connection:request:count:{guardianId}:{wardId}, E2E 계정 키만)
   for (const account of Object.values(ACCOUNTS)) {
     redisDelPattern(`login:*:${account.id}`);
+    redisDelPattern(`connection:request:count:${account.id}:*`);
   }
 
   return Number(out.split('\n').pop());
