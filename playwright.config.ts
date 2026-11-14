@@ -13,6 +13,8 @@ const FINAL_MATCH = /final[\\/].*\.spec\.ts/;
 
 export default defineConfig({
   testDir: './tests',
+  // 실행 전 정리: 강제 종료된 이전 실행이 남긴 오래된 e2e 카메라(상한 3대 점유)를 지운다
+  globalSetup: './src/global-cleanup.ts',
   // 공유 dev 서버 + 계정 상태를 공유하는 시나리오라 순서대로 한 개씩 돌린다
   fullyParallel: false,
   workers: 1,
