@@ -86,6 +86,11 @@ export interface TempUserOptions {
   gender?: 'MALE' | 'FEMALE';
   birthDate?: string;
   password?: string;
+  /**
+   * updated_at 을 N분 전으로 넣는다. users 의 BEFORE UPDATE 트리거(trg_users_updated_at)가
+   * UPDATE 로 되돌린 값을 현재 시각으로 덮어쓰므로, 과거 시각이 필요하면 INSERT 때 넣어야 한다
+   */
+  updatedMinutesAgo?: number;
 }
 
 export interface TempUser {
@@ -133,12 +138,16 @@ export function createTempUser(role: 'GUARDIAN' | 'WARD' | 'ADMIN', nameOrOption
     const suffix = randomChars(4);
     const email = `e2e.temp.${Date.now().toString(36)}${suffix}@silverbridge.test`;
     const name = o.name ?? `E2E임시${role === 'WARD' ? '피보호자' : role === 'GUARDIAN' ? '보호자' : '관리자'}${suffix.slice(0, 2)}`;
+    const ago = o.updatedMinutesAgo;
+    if (ago !== undefined && !(Number.isInteger(ago) && ago >= 0)) throw new Error(`updatedMinutesAgo 는 0 이상의 정수: ${ago}`);
+    const updatedCol = ago === undefined ? '' : ', updated_at';
+    const updatedVal = ago === undefined ? '' : `, now() - interval '${ago} minutes'`;
     psql(`INSERT INTO users (id, email, password, name, phone, role, status, provider, provider_id, gender, birth_date,
-                             postcode, address, address_detail)
+                             postcode, address, address_detail${updatedCol})
           VALUES (${[id, email, hash, name, phone, role, status, provider,
                      provider === 'KAKAO' ? `e2e-kakao-${id}` : null,
                      o.gender ?? 'MALE', o.birthDate ?? '1970-01-01'].map(sqlStr).join(', ')},
-                  ${sqlStr(ADDRESS.postcode)}, ${sqlStr(ADDRESS.address)}, ${sqlStr(ADDRESS.addressDetail)});`);
+                  ${sqlStr(ADDRESS.postcode)}, ${sqlStr(ADDRESS.address)}, ${sqlStr(ADDRESS.addressDetail)}${updatedVal});`);
     return { id, email, name, phone, role, status, provider, password };
   }
   throw new Error('임시 사용자 id 를 만들지 못했습니다.');

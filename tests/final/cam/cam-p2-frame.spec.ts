@@ -61,6 +61,7 @@ test.describe('카메라·이상감지 P2 - 정지 화면', () => {
   test.describe.configure({ mode: 'serial' });
 
   test('CAM-N13 최근 한 장 받기(보호자)', TAGS, async () => {
+    test.setTimeout(1_300_000); // 첫 케이스라 build() 의 자리 대기(최대 9분) + 등록 재시도(최대 10분)를 여기서 기다린다
     const r = await getRig();
     // 보호자 정지 화면도 이 임시 보호자 자신의 속도 제한 키(분·시간)를 만든다. 정확한 이름으로 정리 목록에 올린다
     for (const window of ['1m', '1h']) trackOwnRedisKey(`rate:camera-frame:${window}:${r.guardian.user.id}`);
@@ -74,7 +75,7 @@ test.describe('카메라·이상감지 P2 - 정지 화면', () => {
   });
 
   test('CAM-A12 정지 화면 속도 제한: 분 30회, 31번째는 429', TAGS, async () => {
-    test.setTimeout(240_000);
+    test.setTimeout(1_540_000); // A12 만 골라 돌리면 여기서 build() 를 하므로 준비 대기(최대 약 19분) + 본 확인 4분
     const r = await getRig();
     // 이 임시 피보호자 자신의 속도 제한 키(분·시간)를 정확한 이름으로 정리 목록에 올린다
     for (const window of ['1m', '1h']) trackOwnRedisKey(`rate:camera-ward-frame:${window}:${r.ward.user.id}`);

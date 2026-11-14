@@ -3,7 +3,7 @@
  *
  * 서버를 재시작하지 않는다(컨테이너 변경 금지). 재시작으로 멈춘 계정과 같은 상태를 임시 사용자로 직접 만든다:
  * 탈퇴 1걸음만 끝난 INACTIVE 계정, 그리고 관리자가 정지한 RESTRICTED 계정(삭제되면 안 됨).
- * 둘 다 INACTIVE/RESTRICTED 로 바뀐 지 10분 넘은 것으로 updated_at 을 되돌려 두고, 청소 작업(10분 주기)이 돌 때까지 기다린다.
+ * 둘 다 INACTIVE/RESTRICTED 로 바뀐 지 10분 넘은 것으로 updated_at 을 과거로 넣어 두고(INSERT 시점), 청소 작업(10분 주기)이 돌 때까지 기다린다.
  * 그래서 이 테스트는 최대 약 11분 걸린다.
  */
 import { expect, test } from '../../../src/fixtures';
@@ -14,13 +14,16 @@ import { TAGS_P1 } from './_helpers-auth-p1b';
 
 test('AUTH-N30 탈퇴 중에 멈춘 계정을 10분 청소 작업이 마저 삭제', TAGS_P1, async () => {
   test.setTimeout(15 * 60_000);
-  const stuck = createTempUser('GUARDIAN', { name: 'E2E탈퇴멈춤', status: 'INACTIVE' });
-  const restricted = createTempUser('GUARDIAN', { name: 'E2E이용제한', status: 'RESTRICTED' });
+  // 전환된 지 10분이 지난 상태로 만든다. UPDATE 로 되돌리면 BEFORE UPDATE 트리거가 현재 시각으로 덮어쓰므로 INSERT 때 넣는다
+  const stuck = createTempUser('GUARDIAN', { name: 'E2E탈퇴멈춤', status: 'INACTIVE', updatedMinutesAgo: 11 });
+  const restricted = createTempUser('GUARDIAN', { name: 'E2E이용제한', status: 'RESTRICTED', updatedMinutesAgo: 11 });
   try {
-    // 전환된 지 10분이 지난 상태로 만든다 (이 임시 사용자 두 명의 행만)
-    psql(
-      `UPDATE users SET updated_at = now() - interval '11 minutes' WHERE id IN (${sqlStr(stuck.id)}, ${sqlStr(restricted.id)});`,
+    const staleCount = Number(
+      psql(
+        `SELECT count(*) FROM users WHERE id IN (${sqlStr(stuck.id)}, ${sqlStr(restricted.id)}) AND updated_at < now() - interval '10 minutes';`,
+      ),
     );
+    expect(staleCount, '준비: 두 계정의 updated_at 이 10분 넘게 지난 시각').toBe(2);
     expect(userStatus(stuck.id), '준비: 탈퇴 중(INACTIVE) 계정').toBe('INACTIVE');
     expect(userStatus(restricted.id), '준비: 이용 제한(RESTRICTED) 계정').toBe('RESTRICTED');
 

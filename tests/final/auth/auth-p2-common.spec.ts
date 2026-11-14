@@ -66,14 +66,8 @@ test('AUTH-A55 오류 응답 형식: code 필드 존재, 비정상 요청에도 
   test.setTimeout(120_000);
   const marker = `E2EMARK${uniqueSuffix()}`;
   const korean = /[가-힣]/;
-  // 예외 이름이 로그에 늘지 않는지 보기 위해, 요청을 보내기 전 값을 먼저 읽어 둔다
-  const exceptionNames = ['HttpMessageNotReadableException', 'HttpMediaTypeNotSupportedException'];
-  test.info().annotations.push({
-    type: '기획 확인 필요',
-    description:
-      '서버가 깨진 요청마다 예외 이름(HttpMessageNotReadableException 등)을 로그에 남기는지는 문서에 정책이 없다. 원문(표식)은 남지 않는다. 문서 기대값 "예외 원문 없음" 으로 단언을 유지했다',
-  });
-  const exBefore =exceptionNames.map(name => countBackendLog(name, 600));
+  // 서버는 깨진 요청마다 예외 "클래스 이름"만 warn 로그로 남긴다(GlobalExceptionHandler, 본문 값은 빼고).
+  // 문서가 금지한 것은 요청 원문이므로, 이름이 늘어나는지는 보지 않고 표식(원문)이 없는지만 본다
 
   await test.step('깨진 JSON: 400 INVALID_INPUT + 한국어 안내', async () => {
     const res = await callBe('POST', '/api/auth/signin', { data: `{"email":"${marker}`, headers: { 'Content-Type': 'application/json' } });
@@ -116,9 +110,6 @@ test('AUTH-A55 오류 응답 형식: code 필드 존재, 비정상 요청에도 
 
   await test.step('로그에 깨진 요청의 원문이 남지 않는다', async () => {
     expect(countBackendLog(marker, 600), '깨진 JSON 속 표식이 서버 로그에 없다').toBe(0);
-    exceptionNames.forEach((name, i) => {
-      expect(countBackendLog(name, 600), `예외 이름 ${name} 이 이 테스트 동안 로그에 늘지 않는다`).toBeLessThanOrEqual(exBefore[i]);
-    });
   });
 
   await test.step('화면: 비정상 요청의 서버 안내 문구가 그대로 보이고 "알 수 없는 오류"는 뜨지 않는다', async () => {

@@ -39,6 +39,7 @@ const myCameras = (api: Api) => api.get<CameraView[]>('/api/ward/camera');
 
 test.describe('카메라·이상감지 P2 - 카메라 등록·수정', () => {
   test('CAM-N06 방 이름 수정', TAGS, async () => {
+    test.setTimeout(1_300_000); // 자리 대기(최대 9분) + 등록 재시도(최대 10분)
     const ward = mkUser('WARD', 'E2E방수정');
     const w = await loginUser(ward);
     await needSlots(1);
@@ -78,6 +79,7 @@ test.describe('카메라·이상감지 P2 - 카메라 등록·수정', () => {
   });
 
   test('CAM-A03 기기 토큰 65자 초과는 거절, 64자는 통과', TAGS, async () => {
+    test.setTimeout(1_300_000); // 자리 대기(최대 9분) + 등록 재시도(최대 10분)
     const ward = mkUser('WARD', 'E2E기기토큰');
     const w = await loginUser(ward);
     const over = 'd'.repeat(65);
