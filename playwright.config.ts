@@ -6,8 +6,10 @@ import { contextDefaults } from './src/browser';
 // 장치 기본값(viewport 1280x720 등)이 contextDefaults 를 덮어쓰지 않도록 contextDefaults 를 뒤에 편다.
 const chrome = { ...devices['Desktop Chrome'], ...contextDefaults, channel: 'chrome' } as const;
 const edge = { ...devices['Desktop Edge'], ...contextDefaults, channel: 'msedge' } as const;
-const FLOW_IGNORE = [/global\.setup\.ts/, /variables[\\/]/];
+const FLOW_IGNORE = [/global\.setup\.ts/, /variables[\\/]/, /final[\\/]/];
 const VARIABLES_MATCH = /variables[\\/].*\.spec\.ts/;
+// 최종 QA(2026-11-13): 임시 사용자만 쓰는 케이스 단위 테스트. 테스트 이름 앞에 케이스 ID(예: AUTH-N10)를 붙인다.
+const FINAL_MATCH = /final[\\/].*\.spec\.ts/;
 
 export default defineConfig({
   testDir: './tests',
@@ -43,7 +45,7 @@ export default defineConfig({
   projects: [
     // 흐름 QA: 고정 E2E 계정을 매번 재생성하고 시나리오를 순서대로 돈다
     { name: 'setup', testMatch: /global\.setup\.ts/ },
-    { name: 'e2e', testIgnore: [/global\.setup\.ts/, /variables[\\/]/], dependencies: ['setup'] },
+    { name: 'e2e', testIgnore: FLOW_IGNORE, dependencies: ['setup'] },
     // 변수 QA: 테스트마다 임시 사용자를 만들고 지우므로 고정 계정·전체 재생성이 필요 없다
     { name: 'variables', testMatch: /variables[\\/].*\.spec\.ts/ },
 
@@ -54,5 +56,10 @@ export default defineConfig({
     { name: 'e2e-edge', use: edge, testIgnore: FLOW_IGNORE, dependencies: ['setup'] },
     { name: 'variables-chrome', use: chrome, testMatch: VARIABLES_MATCH },
     { name: 'variables-edge', use: edge, testMatch: VARIABLES_MATCH },
+
+    // 최종 QA: tests/final/<영역>/ 아래 케이스 단위 테스트 (고정 계정을 쓰지 않으므로 setup 불필요)
+    { name: 'final', testMatch: FINAL_MATCH },
+    { name: 'final-chrome', use: chrome, testMatch: FINAL_MATCH },
+    { name: 'final-edge', use: edge, testMatch: FINAL_MATCH },
   ],
 });
