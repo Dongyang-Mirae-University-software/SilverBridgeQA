@@ -19,6 +19,7 @@ import {
   stopManualSession,
   suppressAnomalySmsFallback,
   waitSubscribed,
+  wardStreamer,
 } from '../../src/fire';
 import { expect, test, waitForRealtime } from '../../src/fixtures';
 import { psql, psqlRows, sqlStr } from '../../src/remote';
@@ -246,7 +247,7 @@ test.describe('이상감지 - 중간 심각도', () => {
     expect(restrict.status(), '준비: 관리자가 보호자를 이용 제한').toBe(200);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: '거실' });
-    const streamer = await openAs(a.who, '/guardian/stream');
+    const streamer = await wardStreamer(w.api.login);
     try {
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);

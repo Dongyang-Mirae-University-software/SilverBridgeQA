@@ -1,11 +1,14 @@
 /**
- * 실제 화재 신호를 만드는 도우미 (화면 송출 > 사진 직접 보내기 → 공유 AI 서버 → BE 구독 → 이상감지)
+ * 실제 화재 신호를 만드는 도우미 (피보호자 쿠키로 FE 송출 프록시에 사진 전송 → 공유 AI 서버 → BE 구독 → 이상감지)
  *
  * 공유 AI 서버에 실제 화재 사진을 보내고 dev 에 이상감지 기록이 생긴다. 사용자 승인(2026-10-05)을 받은 테스트에서만 쓴다.
  * 임시 사용자로만 쓰면 FCM 토큰이 없고 문자·알림톡은 기본값이 꺼져 있어 실제 발송은 없다.
  */
-import { Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
+import { APIRequestContext, Page, request } from '@playwright/test';
+
+import type { LoginResult } from './api';
 import { env } from './env';
 import { expect } from './fixtures';
 import { countBackendLog, fetchRemoteFile, psqlRows, redis, sqlStr } from './remote';
@@ -29,27 +32,26 @@ export function suppressAnomalySmsFallback(wardId: string, seconds = 3600) {
   return recipients;
 }
 
-/** AI 서버는 STREAM_SAMPLE_EVERY_N_FRAMES(=5) 프레임마다 한 번 분석한다 */
-const FRAMES_TO_SEND = 6;
+/** AI 서버는 STREAM_SAMPLE_EVERY_N_FRAMES(=5) 프레임마다 한 번 분석한다. 여러 번 분석되도록 넉넉히 보낸다 */
+const FRAMES_TO_SEND = 40;
 
 export function fireImage() {
   return fetchRemoteFile(env.fireImageRemotePath, 'fire-sample.jpg');
 }
 
-/** 화면 송출 페이지의 관리자 영역 ("고급 송출 설정"에도 같은 이름의 입력칸이 있어서 범위를 좁힌다) */
-function adminPanel(streamer: Page) {
-  return streamer.locator('details').filter({ has: streamer.locator('summary[aria-label="관리자 설정 열기"]') });
+/**
+ * 송출용 요청 클라이언트. FE 송출 프록시(/api/streams/**)는 피보호자(WARD) 토큰 쿠키만 받는다.
+ * FE 의 화면 송출 페이지(/guardian/stream)는 FE aed059e 에서 지워졌으므로, 화면 대신 프록시 API 를 직접 부른다.
+ * 쓴 뒤에는 dispose() 로 닫는다(stopManualSession 이 닫아 준다).
+ */
+export async function wardStreamer(wardLogin: LoginResult): Promise<APIRequestContext> {
+  return request.newContext({ baseURL: env.baseUrl, extraHTTPHeaders: { Cookie: `careai_access_token=${wardLogin.accessToken}` } });
 }
 
-/** 송출 화면(/guardian/stream)에서 등록된 카메라의 sessionId 로 사진 송출을 준비한다 */
-export async function startManualSession(streamer: Page, sessionId: string, cameraIdentifier: string) {
-  const admin = adminPanel(streamer);
-  await admin.locator('summary').click();
-  await admin.getByRole('tab', { name: '사진 직접 보내기' }).click();
-  await admin.getByLabel('송출 이름').fill(sessionId);
-  await admin.getByLabel('카메라 식별값').fill(cameraIdentifier);
-  await admin.getByRole('button', { name: '전송 준비' }).click();
-  await expect(admin.getByText(`전송 준비 완료: ${sessionId}`)).toBeVisible();
+/** 등록된 카메라의 sessionId 로 AI 송출 세션을 연다 */
+export async function startManualSession(streamer: APIRequestContext, sessionId: string, cameraIdentifier: string) {
+  const res = await streamer.post('/api/streams/v1/stream-sessions', { data: { sessionId, cameraIdentifier, deviceType: 'ipad' } });
+  expect(res.status(), `송출 세션 열기 ${res.status()}`).toBe(200);
 }
 
 /** BE 가 그 세션을 구독할 때까지 기다린다 (AI 방송 또는 BE 의 60초 재동기화) */
@@ -63,24 +65,25 @@ export async function waitSubscribed(sessionId: string) {
     .toBeGreaterThan(0);
 }
 
-export async function sendFireFrames(streamer: Page, sessionId: string, firePath: string, frames = FRAMES_TO_SEND) {
-  const admin = adminPanel(streamer);
-  await admin.getByLabel('보낼 사진 선택').setInputFiles(firePath);
-  const send = admin.getByRole('button', { name: '선택한 사진 보내기' });
+/**
+ * 화재 사진을 간격을 두고 보낸다. 한꺼번에 몰아 보내면 AI 가 영상 흐름으로 보지 않아 감지가 안 나온다
+ * (CAM 테스트의 startPump 처럼 0.4초 간격, 기본 40장 = 약 16초 이상)
+ */
+export async function sendFireFrames(streamer: APIRequestContext, sessionId: string, firePath: string, frames = FRAMES_TO_SEND, intervalMs = 400) {
+  const jpeg = readFileSync(firePath);
   for (let i = 0; i < frames; i++) {
-    const [response] = await Promise.all([
-      streamer.waitForResponse(r => r.url().includes(`/stream-sessions/${sessionId}/frame`)),
-      send.click(),
-    ]);
-    expect(response.status(), `프레임 ${i + 1} 업로드`).toBe(200);
-    await expect(send).toBeEnabled();
+    const res = await streamer.post(`/api/streams/v1/stream-sessions/${sessionId}/frame`, {
+      multipart: { frame: { name: 'frame.jpg', mimeType: 'image/jpeg', buffer: jpeg } },
+    });
+    expect(res.status(), `프레임 ${i + 1} 업로드`).toBe(200);
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
 }
 
-/** 송출을 끝낸다. 실패해도 테스트 정리를 막지 않는다 */
-export async function stopManualSession(streamer: Page, sessionId: string) {
-  await adminPanel(streamer).getByRole('button', { name: '전송 종료' }).click({ timeout: 5_000 }).catch(() => undefined);
-  await streamer.request.post(`/api/streams/v1/stream-sessions/${sessionId}/stop`).catch(() => undefined);
+/** 송출을 끝내고 클라이언트를 닫는다. 실패해도 테스트 정리를 막지 않는다 */
+export async function stopManualSession(streamer: APIRequestContext, sessionId: string) {
+  await streamer.post(`/api/streams/v1/stream-sessions/${sessionId}/stop`).catch(() => undefined);
+  await streamer.dispose().catch(() => undefined);
 }
 
 /** 브라우저의 STOMP 연결로 /topic/{id}/anomaly-detected 를 엿듣는다 (FE 는 이 토픽을 구독하지 않음) */

@@ -8,7 +8,7 @@
  *   N26·A32 는 맨 앞에서 NOTI_ALLOW_CAMERA_SIGNAL=1 이 아니면 건너뛴다(A33 의 화재 단계도 같은 조건).
  *   NOTI 폴더를 통째로 돌려도 카메라 등록·화재 신호가 나가지 않는다.
  */
-import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed } from '../../../src/fire';
+import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed, wardStreamer } from '../../../src/fire';
 import { env } from '../../../src/env';
 import { expect, test } from '../../../src/fixtures';
 import { psqlRows } from '../../../src/remote';
@@ -73,7 +73,7 @@ test.describe('이용 제한·탈퇴 진행 계정', () => {
       }
       const g = await loginAs(normal);
       const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-      const streamer = await openAs(g.who, '/guardian/stream');
+      const streamer = await wardStreamer(w.api.login);
       try {
         await startManualSession(streamer, camera.sessionId, camera.deviceId);
         await waitSubscribed(camera.sessionId);
@@ -119,7 +119,7 @@ test.describe('이상감지 알림 (공유 AI 서버에 화재 사진을 보낸�
     await setChannels(g.api, false); // 문자·알림톡 꺼 둠
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    const streamer = await openAs(g.who, '/guardian/stream');
+    const streamer = await wardStreamer(w.api.login);
     try {
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);
@@ -159,7 +159,7 @@ test.describe('이상감지 알림 (공유 AI 서버에 화재 사진을 보낸�
     const g = await loginAs(failing);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    const streamer = await openAs(g.who, '/guardian/stream');
+    const streamer = await wardStreamer(w.api.login);
     try {
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);

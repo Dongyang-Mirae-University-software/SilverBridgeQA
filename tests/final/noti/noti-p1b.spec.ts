@@ -7,7 +7,7 @@
  * 복약 알림은 서버 스케줄러가 1분마다 선점하므로 N28·A18 은 1~3분 걸린다.
  */
 import { env } from '../../../src/env';
-import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed } from '../../../src/fire';
+import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed, wardStreamer } from '../../../src/fire';
 import { connect } from '../../../src/variables';
 import {
   addMedication,
@@ -33,11 +33,11 @@ import {
   waitForLog,
 } from './_helpers-noti-p1b';
 import { psql, sqlStr } from '../../../src/remote';
-import type { Page } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 import type { Api } from '../../../src/api';
 
 /** 카메라 정리: 세션 중지가 실패해도 카메라 삭제는 반드시 시도한다 */
-async function cleanupCamera(api: Api, cameraId: number, sessionId: string, streamer: Page | undefined) {
+async function cleanupCamera(api: Api, cameraId: number, sessionId: string, streamer: APIRequestContext | undefined) {
   if (streamer) await stopManualSession(streamer, sessionId).catch(() => undefined);
   await api.call('DELETE', `/api/ward/camera/${cameraId}`).catch(() => undefined);
 }
@@ -327,9 +327,9 @@ test.describe('채널 수신 설정', () => {
     expect((await g.api.raw('PUT', CHANNEL_SETTING, { settings: [{ channelType: 'EMAIL', enabled: true }] })).status(), '준비: 보호자가 이메일 켬').toBe(200);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    let streamer: Page | undefined;
+    let streamer: APIRequestContext | undefined;
     try {
-      streamer = await openAs(g.who, '/guardian/stream');
+      streamer = await wardStreamer(w.api.login);
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);
       await sendFireFrames(streamer, camera.sessionId, fireImage());
@@ -368,9 +368,9 @@ test.describe('채널 수신 설정', () => {
     expect((await w.api.raw('PUT', CHANNEL_SETTING, on)).status(), '준비: 피보호자가 알림톡·문자를 켬').toBe(200);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    let streamer: Page | undefined;
+    let streamer: APIRequestContext | undefined;
     try {
-      streamer = await openAs(g.who, '/guardian/stream');
+      streamer = await wardStreamer(w.api.login);
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);
       await sendFireFrames(streamer, camera.sessionId, fireImage());
@@ -516,9 +516,9 @@ test.describe('채널 수신 설정', () => {
     expect((await g.api.raw('PUT', CHANNEL_SETTING, { settings: [{ channelType: 'KAKAO_ALIMTALK', enabled: true }] })).status(), '준비: 알림톡 켬').toBe(200);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    let streamer: Page | undefined;
+    let streamer: APIRequestContext | undefined;
     try {
-      streamer = await openAs(g.who, '/guardian/stream');
+      streamer = await wardStreamer(w.api.login);
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);
       await sendFireFrames(streamer, camera.sessionId, fireImage());

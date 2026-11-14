@@ -5,7 +5,7 @@
  *   외부 발송이 없다. 화재(이상감지) 단계는 카메라 등록·이상감지 신호가 필요해 CAM_SIGNAL_ALLOWED=1 일 때만 돈다.
  * - A29 는 카메라 등록·화재 신호와 실제 알림톡·문자 접수가 필요해 CAM_SIGNAL_ALLOWED=1 일 때만 돈다(작성만 해 두었다).
  */
-import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed } from '../../../src/fire';
+import { fireImage, sendFireFrames, startManualSession, stopManualSession, waitSubscribed, wardStreamer } from '../../../src/fire';
 import { env } from '../../../src/env';
 import { expect, test } from '../../../src/fixtures';
 import { redis } from '../../../src/remote';
@@ -35,7 +35,7 @@ test.describe('문자 대체 규칙', () => {
     expect((await gb.api.raw('PUT', '/api/user/me/notification-settings', only('SMS'))).status(), '준비: 문자만 켬').toBe(200);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    const streamer = await openAs(ga.who, '/guardian/stream');
+    const streamer = await wardStreamer(w.api.login);
     try {
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
       await waitSubscribed(camera.sessionId);
@@ -105,7 +105,7 @@ test.describe('문자 대체 규칙', () => {
     const fireKey = `notify:sms-fallback:ANOMALY_DETECTED:${guardian.id}`;
     const smsOf = (row: { channels: string }) => channelsOf(row).find(c => c.channel === 'SMS');
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: CAMERA_LABEL });
-    const streamer = await openAs(g.who, '/guardian/stream');
+    const streamer = await wardStreamer(w.api.login);
     try {
       redis('SET', sosKey, '30', 'EX', '3600'); // SOS 한도는 이미 소진
       await startManualSession(streamer, camera.sessionId, camera.deviceId);

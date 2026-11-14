@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { request } from '@playwright/test';
 
 import { env } from '../../src/env';
-import { fireImage, sendFireFrames, startManualSession, stopManualSession, suppressAnomalySmsFallback, waitSubscribed } from '../../src/fire';
+import { fireImage, sendFireFrames, startManualSession, stopManualSession, suppressAnomalySmsFallback, waitSubscribed, wardStreamer } from '../../src/fire';
 import { expect, test } from '../../src/fixtures';
 import { psql, psqlRows, sqlStr } from '../../src/remote';
 import { connect } from '../../src/variables';
@@ -197,7 +197,7 @@ test.describe('이상감지 - 낮은 심각도', () => {
     const g = await loginAs(guardian);
 
     const camera = await w.api.post<{ id: number; sessionId: string; deviceId: string }>('/api/ward/camera', { label: '거실' });
-    const streamer = await openAs(g.who, '/guardian/stream');
+    const streamer = await wardStreamer(w.api.login);
     let incidents = 0;
     try {
       await startManualSession(streamer, camera.sessionId, camera.deviceId);
