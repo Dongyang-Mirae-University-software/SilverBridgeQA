@@ -22,12 +22,15 @@ export const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(res
 // 속도 제한: 이 실행 PC 의 IP 키만 다룬다 (다른 IP·다른 영역의 카운터는 건드리지 않는다)
 // ---------------------------------------------------------------------------------------------
 
-/** rate:signin:* 키와 값을 읽는다 (읽기 전용, 고정 패턴) */
+/**
+ * rate:signin:* 키와 횟수를 읽는다 (읽기 전용, 고정 패턴).
+ * 남은 시간(TTL)은 읽지 않는다: TTL 은 매초 줄어 상관없는 키도 "바뀐 키"로 보이게 해 후보가 여러 개로 남았다(CONN-A38·A44 1차 실패).
+ */
 function scanSigninCounters(): Map<string, string> {
   const out = remoteBash(
     [
       `docker exec -i ${env.redisContainer} sh -s <<'__E2E_SCAN__'`,
-      `redis-cli --scan --pattern 'rate:signin:*' | while read k; do echo "$k $(redis-cli GET "$k") $(redis-cli TTL "$k")"; done`,
+      `redis-cli --scan --pattern 'rate:signin:*' | while read k; do echo "$k $(redis-cli GET "$k")"; done`,
       '__E2E_SCAN__',
       '',
     ].join('\n'),
@@ -44,19 +47,23 @@ let myIpSuffix: string | undefined;
 
 /**
  * 이 PC 가 BE 에서 보이는 IP 키 끝부분. 미가입 임시 이메일로 로그인을 불러 보고, 그 사이 새로 생겼거나 값이 바뀐
- * rate:signin:* 키를 찾는다. 후보가 하나로 좁혀질 때까지 최대 3번 확인한다. 한 번 알아내면 이 프로세스 안에서 재사용한다.
+ * rate:signin:* 키를 찾는다. 후보가 하나로 좁혀질 때까지 최대 8번 확인한다. 한 번 알아내면 이 프로세스 안에서 재사용한다.
+ * 다른 IP(다른 세션·실사용자)가 같은 순간 로그인하면 그 키도 바뀌므로 판마다 교집합을 남긴다. 다른 영역이 내 키를 지워
+ * 바뀐 키가 없거나 교집합이 비면 그 판은 버리고 다시 센다.
  */
 export async function myRateSuffix(): Promise<string> {
   if (myIpSuffix) return myIpSuffix;
   let candidates: Set<string> | undefined;
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 8; round++) {
     const ghost = `e2e.ipprobe.${uniqueSuffix()}@silverbridge.test`;
     const before = scanSigninCounters();
     await signinRaw(ghost, 'Wrong1!pass');
     const after = scanSigninCounters();
     redisDelPattern(`login:*:${sha256Hex(ghost)}`);
     const changed = [...after.keys()].filter(key => before.get(key) !== after.get(key));
-    candidates = candidates ? new Set(changed.filter(key => candidates!.has(key))) : new Set(changed);
+    if (!changed.length) continue;
+    const next = candidates ? new Set(changed.filter(key => candidates!.has(key))) : new Set(changed);
+    candidates = next.size ? next : new Set(changed);
     if (candidates.size === 1) break;
   }
   if (!candidates || candidates.size !== 1) {
