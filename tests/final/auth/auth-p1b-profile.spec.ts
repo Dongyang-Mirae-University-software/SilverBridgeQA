@@ -64,7 +64,7 @@ test('AUTH-A42 사진 업로드 검증: 5MB 초과, 10MB 초과, 허용 외 형�
   expect(profileImageOf(user.id), '거절된 요청으로 사진이 저장되지 않았다').toBe('');
 });
 
-test('AUTH-A44 남의 파일·외부 URL 은 삭제하지 않음', TAGS_P1, async ({ tempUser }) => {
+test('AUTH-A44 외부 URL 은 삭제하지 않음 (남의 파일 주인 확인은 BE 백로그)', TAGS_P1, async ({ tempUser }) => {
   test.setTimeout(360_000);
   const owner = await tempUser('GUARDIAN', { name: 'E2E파일주인' });
   const other = await tempUser('GUARDIAN', { name: 'E2E외부주소' });
@@ -128,11 +128,15 @@ test('AUTH-A44 남의 파일·외부 URL 은 삭제하지 않음', TAGS_P1, asyn
     });
 
     // 타인 파일(USER-G03): C 의 사진 주소가 A 의 진짜 파일 주소(우리 파일 서버)일 때. 앱으로는 만들 수 없는 상태라 C 의 행만 DB 로 맞춘다.
-    // 한 단계가 실패해도 다음 단계를 보도록 soft 로 단언하고, 각 단계 앞에서 A 의 파일을 새로 올려 둔다
-    test.info().annotations.push({
-      type: '기획 확인 필요',
-      description: '배포 BE(FileServerClient.delete)는 우리 파일 서버 호스트의 주소이면 파일명만 보고 지운다(주인 확인 없음). 그래서 사진 주소가 남의 진짜 파일 주소인 상태(DB 로만 만들 수 있고 앱으로는 못 만든다)에서 삭제·교체·탈퇴하면 그 파일도 지워진다. 케이스 기대값은 "남의 파일은 지우지 않는다" 이면서 "우리 파일 서버 주소만 지운다" 라 둘이 충돌한다. 아래 단언은 케이스 기대값(남의 파일 유지) 그대로 둔다',
-    });
+    // 2026-11-16 결정: 문서 범위를 "외부 주소는 지우지 않는다"로 좁히고, 파일 주인 확인은 BE 백로그(audit-index AUTH-A44)로 뺐다.
+    // 주인 확인이 들어가면 OWNER_CHECK_IMPLEMENTED 를 true 로 바꿔 아래 단계를 다시 켠다.
+    const OWNER_CHECK_IMPLEMENTED = false;
+    if (!OWNER_CHECK_IMPLEMENTED) {
+      test.info().annotations.push({
+        type: 'BE 백로그 (2026-11-16 결정)',
+        description: '남의 진짜 파일 주소를 단 상태(DB 로만 만들 수 있음)의 삭제·교체·탈퇴는 확인하지 않는다. 배포 BE(FileServerClient.delete)는 우리 파일 서버 주소면 주인 확인 없이 파일명으로 지운다 - 주인 확인은 BE 백로그',
+      });
+    } else {
     await test.step('C 의 사진 주소가 A 의 파일 주소일 때 삭제: 200, C 의 DB 는 NULL, A 의 파일은 그대로', async () => {
       await renewCanary();
       psql(`UPDATE users SET profile_image = ${sqlStr(canaryUrl)} WHERE id = ${sqlStr(third.id)};`);
@@ -165,6 +169,7 @@ test('AUTH-A44 남의 파일·외부 URL 은 삭제하지 않음', TAGS_P1, asyn
       expect.soft(Number(psql(`SELECT count(*) FROM users WHERE id = ${sqlStr(third.id)};`)), 'C 계정이 삭제됨').toBe(0);
       expect.soft(await httpStatusOf(canaryUrl), 'A 의 파일이 삭제되지 않았다').toBe(200);
     });
+    }
   } finally {
     // B·C 가 올린 자기 파일이 남았으면 자기가 지운다 (이미 탈퇴했거나, 사진이 A 의 주소·외부 주소이면 건드리지 않는다)
     for (const u of [other, third]) {

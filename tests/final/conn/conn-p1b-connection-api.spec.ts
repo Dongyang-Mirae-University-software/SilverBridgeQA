@@ -497,12 +497,13 @@ test.describe('CONN 연결 P1 묶음 b (API)', () => {
         await expect
           .poll(() => notiRows(ward.id, 'CONNECTION_DISCONNECTED').length, { message: '피보호자에게 해제 알림', timeout: 20_000, intervals: [1000, 2000] })
           .toBe(1);
-        expect(notiRows(ward.id, 'CONNECTION_DISCONNECTED')[0].body).toBe('가족 연결이 해제됐어요.');
+        // 역할 변경은 관리자 조치 - 2026-11-16(CONN-N06)부터 피보호자 문구에 관리자 표시
+        expect(notiRows(ward.id, 'CONNECTION_DISCONNECTED')[0].body).toBe('관리자가 가족 연결을 해제했어요.');
         expect(medDeletedOrGone(medId), '보호자 역할이었던 사람이 등록한 약은 건드리지 않는다').toBe(false);
         test.info().annotations.push({
           type: '문서와 코드 차이',
           description:
-            '케이스는 "상대에게 관리자 조치로 안내"와 "해당 보호자가 등록한 약 중지"를 한꺼번에 적었지만 배포 코드는 나눠 처리한다. 피보호자가 받는 해제 문구는 누가 끊었든 단문 "가족 연결이 해제됐어요."(관리자 표시 없음), "관리자가 연결을 해제했습니다."는 보호자가 받는다. 약 중지는 탈퇴한 보호자가 등록한 약(탈퇴)과 역할이 바뀐 피보호자가 받던 약(역할 변경)에만 적용되고, 역할이 바뀐 보호자가 등록해 준 약은 남는다. 코드 값으로 고정했다.',
+            '케이스는 "상대에게 관리자 조치로 안내"와 "해당 보호자가 등록한 약 중지"를 한꺼번에 적었지만 배포 코드는 나눠 처리한다. 피보호자가 받는 해제 문구는 단문 "관리자가 가족 연결을 해제했어요."(2026-11-16 CONN-N06), "관리자가 연결을 해제했습니다."는 보호자가 받는다. 약 중지는 탈퇴한 보호자가 등록한 약(탈퇴)과 역할이 바뀐 피보호자가 받던 약(역할 변경)에만 적용되고, 역할이 바뀐 보호자가 등록해 준 약은 남는다. 코드 값으로 고정했다.',
         });
       });
     } finally {

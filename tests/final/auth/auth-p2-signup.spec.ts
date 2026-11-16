@@ -172,25 +172,18 @@ test('AUTH-N09 카카오 프로필 이미지 kakaocdn 주소 처리', TAGS_P2, a
   }
 });
 
-test('AUTH-A12 카카오 프로필 이미지: kakaocdn 이외 주소는 이미지 없이 가입 진행', TAGS_P2, async () => {
-  // 문서 기대값으로 단언한다: 201 로 가입되고 profile_image 는 비어 있다.
-  // 배포 BE 는 400 INVALID_INPUT 으로 거절하므로(KakaoRegisterRequest @Pattern, KakaoAuthService.toAllowedProfileImageUrl)
-  // 이 테스트는 실패로 남는다. 결과는 "통과"가 아니라 "문서-코드 차이(결정 필요)" 로 보고한다.
-  test.info().annotations.push({
-    type: '문서-코드 차이(결정 필요)',
-    description:
-      '문서: kakaocdn 밖 주소면 이미지 없이 가입 진행. 배포 코드: 가입 요청에서 400 INVALID_INPUT 거절("이미지 없이 진행"은 카카오 로그인 응답 signin/kakao 에서만). 문서가 맞다면 가입이 막히는 버그, 코드가 맞다면 문서 수정. 기획 확인 필요. "파일 서버 삭제는 우리 주소에만 전송" 은 AUTH-A44(P1b) 결과를 비고로 연결한다(이 케이스에서는 확인하지 않음)',
-  });
+test('AUTH-A12 카카오 프로필 이미지: 가입 요청의 kakaocdn 이외 주소는 400 으로 거절', TAGS_P2, async () => {
+  // 2026-11-16 결정·문서 정정(BE 프로젝트_설명 카카오 가입): 로그인 응답(signin/kakao)은 밖 주소를 비우고,
+  // 가입 요청(signup/kakao)에 kakaocdn 밖 주소가 오면 400 INVALID_INPUT. 임의 주소 저장을 막는 의도된 동작이다.
   const urls = ['https://example.com/profile.png', 'https://kakaocdn.net.example.com/p.png', 'https://user@k.kakaocdn.net/p.png'];
   for (const url of urls) {
     const k = prepareKakaoSignup();
     try {
       const label = url.replace(/^https:\/\/(user@)?/, '');
       const res = await callBe('POST', '/api/auth/signup/kakao', { data: k.body(url) });
-      expect.soft(res.status, `${label}: 문서 기대값은 201(이미지 없이 가입). 실제 ${res.status} ${res.code}`).toBe(201);
-      if (res.status === 201) {
-        expect.soft(columnByEmail(k.email, 'profile_image'), `${label}: profile_image 는 비어 있어야 한다`).toBe('[]');
-      }
+      expect.soft(res.status, `${label}: 기대값 400. 실제 ${res.status} ${res.code}`).toBe(400);
+      expect.soft(res.code, `${label}: INVALID_INPUT`).toBe('INVALID_INPUT');
+      expect.soft(columnByEmail(k.email, 'id'), `${label}: 거절된 가입으로 계정이 생기지 않는다`).toBe('');
     } finally {
       k.cleanup();
     }

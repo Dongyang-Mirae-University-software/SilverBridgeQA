@@ -154,12 +154,10 @@ test('AUTH-A24 refresh 쿠키·토큰이 없거나 만료', TAGS_P1, async ({ te
 
   await test.step('쿠키도 본문도 없이 refresh', async () => {
     const res = await callBe('POST', '/api/auth/refresh');
-    // 문서(BE 552-563)와 케이스 기대값은 401. 뒤 단계도 계속 보도록 soft 로 단언한다
-    expect.soft(res.status, `쿠키·본문 없는 refresh 상태 ${res.status} (${res.code}) - 문서 기대값은 401`).toBe(401);
-    test.info().annotations.push({
-      type: '문서-코드 불일치 (BE 또는 문서 수정 필요)',
-      description: `문서는 쿠키 없는 refresh 를 401 로 적었다. 배포 BE(AuthController.refresh)는 토큰이 아예 없으면 400 INVALID_INPUT 을 준다. 실제 응답: ${res.status} ${res.code}. 문서 값(401)으로 단언해 실패로 남겼다`,
-    });
+    // 2026-11-16 문서 정정(BE 프로젝트_설명 refresh 응답 코드): 토큰이 아예 없으면 400 INVALID_INPUT(요청 형식 오류),
+    // 토큰이 있는데 무효·만료면 401. 뒤 단계도 계속 보도록 soft 로 단언한다
+    expect.soft(res.status, `쿠키·본문 없는 refresh 상태 ${res.status} (${res.code}) - 기대값 400`).toBe(400);
+    expect.soft(res.code, '토큰 없음은 INVALID_INPUT').toBe('INVALID_INPUT');
   });
 
   await test.step('모르는(없는) refresh 토큰은 401 이고 쿠키를 지운다', async () => {

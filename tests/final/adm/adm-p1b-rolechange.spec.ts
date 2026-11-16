@@ -16,7 +16,8 @@ import {
 
 test.use({ trace: 'off', video: 'off', screenshot: 'off' });
 
-const WARD_DISCONNECTED_BODY = '가족 연결이 해제됐어요.';
+// 역할 변경은 관리자 조치(disconnectedBy=ADMIN) - 2026-11-16(CONN-N06)부터 피보호자 문구에 관리자 표시
+const WARD_DISCONNECTED_BODY = '관리자가 가족 연결을 해제했어요.';
 const GUARDIAN_ADMIN_DISCONNECTED_BODY = '관리자가 연결을 해제했습니다.';
 
 test('ADM-N36 역할 변경 보호자 -> 피보호자: 연결 정리와 알림', TAGS, async ({ owned, openAs }) => {
@@ -57,7 +58,7 @@ test('ADM-N36 역할 변경 보호자 -> 피보호자: 연결 정리와 알림',
     expect(frames.frames[0].destination).toBe(`/topic/${connected.id}/connection-cancelled`);
     const payload = JSON.parse(frames.frames[0].body) as { disconnectedBy?: string; body?: string; type?: string };
     expect(payload.disconnectedBy, '해제 주체는 관리자 조치').toBe('ADMIN');
-    expect(payload.body, '받는 사람이 피보호자면 누가 끊었든 한 줄 문구').toBe(WARD_DISCONNECTED_BODY);
+    expect(payload.body, '받는 사람이 피보호자면 관리자 표시가 붙은 한 줄 문구').toBe(WARD_DISCONNECTED_BODY);
     expect(payload.body, '보호자 문구가 아니다').not.toContain('보호자가 연결을 해제');
 
     const rows = await settle(() => notifRows(connected.id, 'CONNECTION_DISCONNECTED'), x => x.length >= 1, 30_000);
@@ -89,7 +90,7 @@ test('ADM-N36 역할 변경 보호자 -> 피보호자: 연결 정리와 알림',
   await closeStompCapture(page, 'requested');
   test.info().annotations.push({
     type: '문서와 차이',
-    description: `문서는 상대에게 "관리자가 연결을 해제했습니다"가 간다고 적었다. 배포 코드는 받는 사람이 피보호자이면 해제 주체와 상관없이 한 줄 문구("${WARD_DISCONNECTED_BODY}")를 보내고, 해제 주체는 실시간 알림의 disconnectedBy=ADMIN 으로 알린다. 코드 값으로 고정했다. 받는 사람이 보호자이면 관리자 문구가 간다(ADM-N37 에서 확인).`,
+    description: `받는 사람이 피보호자이면 어르신용 한 줄 문구("${WARD_DISCONNECTED_BODY}", 2026-11-16 CONN-N06 결정), 보호자이면 "관리자가 연결을 해제했습니다"(ADM-N37 에서 확인). 해제 주체는 실시간 알림의 disconnectedBy=ADMIN 으로도 간다.`,
   });
 });
 

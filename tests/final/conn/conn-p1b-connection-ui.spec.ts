@@ -228,17 +228,18 @@ test.describe('CONN 연결 P1 묶음 b (화면·실시간)', () => {
 
         expect(connStatus(p.id), '연결 끝남').toBe('DISCONNECTED');
         await expect(card, '피보호자 목록에서 바로 사라진다').toHaveCount(0);
-        await expect(wardPage.getByText('가족 연결이 해제됐어요.'), '피보호자 화면 알림').toBeVisible();
+        // 2026-11-16(CONN-N06): 피보호자가 받는 문구에 해제한 쪽을 표시한다(보호자 탈퇴는 단문 유지 - M-2)
+        const WARD_BODY = '보호자가 가족 연결을 해제했어요.';
+        await expect(wardPage.getByText(WARD_BODY), '피보호자 화면 알림').toBeVisible();
         const frames = frameBodies(wardFrames, 'connection-cancelled');
         expect(frames).toHaveLength(1);
         expect(frames[0].disconnectedBy, '누가 해제했는지').toBe('GUARDIAN');
-        expect(frames[0].body).toBe('가족 연결이 해제됐어요.');
+        expect(frames[0].body).toBe(WARD_BODY);
         await expect
           .poll(() => notiRows(p.ward.id, 'CONNECTION_DISCONNECTED').length, { message: '피보호자 알림 이력', timeout: 20_000, intervals: [1000, 2000] })
           .toBe(1);
-        expect(notiRows(p.ward.id, 'CONNECTION_DISCONNECTED')[0].body).toBe('가족 연결이 해제됐어요.');
         // 케이스·CONN-G12: 누가 해제했는지가 사용자 눈에 보여야 한다. 신호의 disconnectedBy 만으로 대신하지 않는다.
-        expect.soft(notiRows(p.ward.id, 'CONNECTION_DISCONNECTED')[0].body, '피보호자 알림 문구에 해제한 쪽(보호자)이 표시된다 (문서와 코드 차이)').toContain('보호자');
+        expect(notiRows(p.ward.id, 'CONNECTION_DISCONNECTED')[0].body, '피보호자 알림 문구에 해제한 쪽(보호자)이 표시된다').toBe(WARD_BODY);
         expect(notiRows(p.guardian.id, 'CONNECTION_DISCONNECTED'), '끊은 사람에게는 알림이 가지 않는다').toHaveLength(0);
       });
 
@@ -271,9 +272,9 @@ test.describe('CONN 연결 P1 묶음 b (화면·실시간)', () => {
       });
 
       test.info().annotations.push({
-        type: '문서와 코드 차이',
+        type: '참고 (2026-11-16 CONN-N06 반영)',
         description:
-          '문서·케이스는 상대에게 "연결이 해제되었어요" 알림과 함께 누가 해제했는지 표시한다고 적었다. 배포 코드는 피보호자가 받는 알림은 누가 끊었든 단문 "가족 연결이 해제됐어요."(해제한 쪽 글자 없음), 보호자가 받는 알림은 "피보호자가 연결을 해제했습니다."이다. 해제한 쪽은 실시간 신호의 disconnectedBy(GUARDIAN/WARD)로 전달된다. 코드 값으로 고정했다.',
+          '피보호자가 받는 알림은 해제한 쪽을 붙인 단문("보호자가 가족 연결을 해제했어요."), 보호자가 받는 알림은 "피보호자가 연결을 해제했습니다."이다. 해제한 쪽은 실시간 신호의 disconnectedBy(GUARDIAN/WARD)로도 전달된다.',
       });
     } finally {
       for (const pair of cleanup) clearCounter(pair.guardianId, pair.wardId);

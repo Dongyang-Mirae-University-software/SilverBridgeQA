@@ -151,11 +151,8 @@ test('ADM-N41 강제 연결 해제', TAGS, async ({ tempUser, signIn, openAs, la
   await expect.poll(() => notificationRows(ward.id, 'CONNECTION_DISCONNECTED').length, { timeout: 30_000, message: '피보호자 해제 알림' }).toBe(1);
   expect(notificationRows(guardian.id, 'CONNECTION_DISCONNECTED')[0].body, '보호자 알림 문구').toBe('관리자가 연결을 해제했습니다.');
   const wardBody = notificationRows(ward.id, 'CONNECTION_DISCONNECTED')[0].body;
-  test.info().annotations.push({
-    type: '문서와 코드 차이',
-    description: `문서는 양쪽 모두 '관리자가 연결을 해제했습니다'로 적었지만, 피보호자 알림은 어르신용 단문('${wardBody}')이다. 코드 값으로 고정한다(ConnectionNotificationListener.DISCONNECTED_WARD_BODY).`,
-  });
-  expect(wardBody, '피보호자 알림 문구(어르신용 단문)').toBe('가족 연결이 해제됐어요.');
+  // 2026-11-16(CONN-N06): 피보호자 문구는 어르신용 단문에 해제한 쪽(관리자)을 붙인다
+  expect(wardBody, '피보호자 알림 문구(어르신용 단문, 관리자 표시)').toBe('관리자가 가족 연결을 해제했어요.');
   expect(auditCountOf(admin.id, 'FORCE_DISCONNECT'), '해제 감사 기록').toBe(1);
   expect(Number(psqlOne(`SELECT count(*) FROM admin_audit_log WHERE admin_id = ${sqlStr(admin.id)} AND action = 'FORCE_DISCONNECT' AND target_id = ${sqlStr(String(connectionId))};`)), '감사 기록의 대상 연결 id').toBe(1);
 

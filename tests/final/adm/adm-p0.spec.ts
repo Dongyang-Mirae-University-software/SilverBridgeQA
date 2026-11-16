@@ -375,8 +375,8 @@ test('ADM-N38 강제 탈퇴: 일반 탈퇴와 같은 길, 상대에게 해제 �
     const rows = await settle(() => notificationRows(ward.id, 'CONNECTION_DISCONNECTED'), r => r.length >= 1, 20_000);
     test.info().annotations.push({ type: '실측', description: `상대(피보호자) 해제 알림 이력 ${rows.length}건 ${rows.map(r => r.body).join(' / ')}` });
     expect(rows.length, '연결 상대(피보호자)에게 해제 알림 이력이 정확히 1건 있어야 한다').toBe(1);
-    // 배포본 문구는 단문("가족 연결이 해제됐어요.")이라 누가 끊었는지는 싣지 않는다 - 해제 안내인지만 본다
-    expect(rows[0].body, '연결 해제를 알리는 문구').toContain('연결이 해제');
+    // 피보호자 문구는 단문이고 2026-11-16(CONN-N06)부터 해제한 쪽이 붙는다("관리자가 가족 연결을 해제했어요." 등) - 해제 안내인지만 본다
+    expect(rows[0].body, '연결 해제를 알리는 문구').toMatch(/연결(이|을) 해제/);
   });
 
   await test.step('누가 지웠는지 감사 기록이 남음', async () => {
