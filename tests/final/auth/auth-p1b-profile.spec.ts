@@ -64,7 +64,7 @@ test('AUTH-A42 사진 업로드 검증: 5MB 초과, 10MB 초과, 허용 외 형�
   expect(profileImageOf(user.id), '거절된 요청으로 사진이 저장되지 않았다').toBe('');
 });
 
-test('AUTH-A44 외부 URL 은 삭제하지 않음 (남의 파일 주인 확인은 BE 백로그)', TAGS_P1, async ({ tempUser }) => {
+test('AUTH-A44 남의 파일·외부 URL 은 삭제하지 않음', TAGS_P1, async ({ tempUser }) => {
   test.setTimeout(360_000);
   const owner = await tempUser('GUARDIAN', { name: 'E2E파일주인' });
   const other = await tempUser('GUARDIAN', { name: 'E2E외부주소' });
@@ -128,9 +128,9 @@ test('AUTH-A44 외부 URL 은 삭제하지 않음 (남의 파일 주인 확인�
     });
 
     // 타인 파일(USER-G03): C 의 사진 주소가 A 의 진짜 파일 주소(우리 파일 서버)일 때. 앱으로는 만들 수 없는 상태라 C 의 행만 DB 로 맞춘다.
-    // 2026-11-16 결정: 문서 범위를 "외부 주소는 지우지 않는다"로 좁히고, 파일 주인 확인은 BE 백로그(audit-index AUTH-A44)로 뺐다.
-    // 주인 확인이 들어가면 OWNER_CHECK_IMPLEMENTED 를 true 로 바꿔 아래 단계를 다시 켠다.
-    const OWNER_CHECK_IMPLEMENTED = false;
+    // 2026-11-16: BE 가 지우기 직전에 "다른 회원이 아직 쓰는 파일이면 지우지 않는다"를 넣었다(UserService.deleteIfUnreferenced).
+    // 그래서 아래 단계(남의 파일 유지)를 다시 켠다. 끄려면 false.
+    const OWNER_CHECK_IMPLEMENTED = true;
     if (!OWNER_CHECK_IMPLEMENTED) {
       test.info().annotations.push({
         type: 'BE 백로그 (2026-11-16 결정)',
